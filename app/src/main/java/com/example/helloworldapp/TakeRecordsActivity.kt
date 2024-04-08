@@ -36,6 +36,8 @@ import com.example.helloworldapp.ui.theme.HelloWorldAppTheme
 
 class TakeRecordsActivity : ComponentActivity() {
     private val buttonColors = mutableStateListOf<Boolean>().apply { addAll(List(6) { false }) }
+    private var uniqueId: String? = null
+
     private val getResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             // Get the data from the intent
@@ -51,6 +53,7 @@ class TakeRecordsActivity : ComponentActivity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        uniqueId = intent.getStringExtra("UNIQUE_ID")
         setContent {
             HelloWorldAppTheme {
                 val buttonColorsState = remember { buttonColors }
@@ -71,7 +74,8 @@ class TakeRecordsActivity : ComponentActivity() {
                         buttonColors = buttonColorsState,
                         getResult = getResult,
                         modifier = Modifier
-                            .size(width = 300.dp, height = 400.dp) // Example size, adjust as needed
+                            .size(width = 300.dp, height = 400.dp),
+                        uniqueId = uniqueId
                     )
                 }
             }
@@ -82,20 +86,20 @@ class TakeRecordsActivity : ComponentActivity() {
 
 
 @Composable
-fun ButtonGrid(context: Context,  buttonColors: List<Boolean>, getResult: ActivityResultLauncher<Intent>,  modifier: Modifier = Modifier) {
+fun ButtonGrid(context: Context,  buttonColors: List<Boolean>, getResult: ActivityResultLauncher<Intent>,  modifier: Modifier = Modifier, uniqueId: String?) {
     Column(
         verticalArrangement = Arrangement.SpaceAround,
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.fillMaxSize()
     ) {
         (1..6).chunked(2).forEach { pair ->
-            ButtonRow(buttonLabels = pair, buttonColors = buttonColors, getResult = getResult, context = context)
+            ButtonRow(buttonLabels = pair, buttonColors = buttonColors, getResult = getResult, context = context, uniqueId = uniqueId)
         }
     }
 }
 
 @Composable
-fun ButtonRow(buttonLabels: List<Int>, buttonColors: List<Boolean>, getResult: ActivityResultLauncher<Intent>, context: Context) {
+fun ButtonRow(buttonLabels: List<Int>, buttonColors: List<Boolean>, getResult: ActivityResultLauncher<Intent>, context: Context, uniqueId: String?) {
 
     Row(
         horizontalArrangement = Arrangement.SpaceEvenly,
@@ -104,14 +108,14 @@ fun ButtonRow(buttonLabels: List<Int>, buttonColors: List<Boolean>, getResult: A
     ) {
         buttonLabels.forEach {label ->
             val isSelected = buttonColors[label - 1]
-            RoundButton(label = "$label", isSelected = isSelected, getResult = getResult, context = context)
+            RoundButton(label = "$label", isSelected = isSelected, getResult = getResult, context = context, uniqueId = uniqueId)
         }
     }
 }
 
 
 @Composable
-fun RoundButton(label: String, isSelected: Boolean, getResult: ActivityResultLauncher<Intent>, context: Context) {
+fun RoundButton(label: String, isSelected: Boolean, getResult: ActivityResultLauncher<Intent>, context: Context, uniqueId: String?) {
     val backgroundColor = if (isSelected) Color.Green else MaterialTheme.colorScheme.primary
 
     Button(
@@ -119,6 +123,10 @@ fun RoundButton(label: String, isSelected: Boolean, getResult: ActivityResultLau
             // Here, you would launch RecordActivity for a result
             val intent = Intent(context, RecordActivity::class.java).apply {
                 putExtra("button_number", label)
+                putExtra("UNIQUE_ID", uniqueId)
+//                uniqueId?.let {
+//                    putExtra("UNIQUE_ID", it) // Pass the unique ID to RecordActivity
+//                }
             }
             getResult.launch(intent)
             // For demonstration, let's assume you want to toggle the color on click

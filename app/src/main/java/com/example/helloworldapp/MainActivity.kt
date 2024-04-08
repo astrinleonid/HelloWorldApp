@@ -16,6 +16,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -23,6 +27,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.helloworldapp.ui.theme.HelloWorldAppTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,6 +57,7 @@ fun Greeting(name: String, context: Context? = null, modifier: Modifier = Modifi
 
         // LocalContext is used to provide context in a composable function
         val context = LocalContext.current
+        var uniqueId by remember { mutableStateOf<String?>(null) }
 
         // Column composable to stack items vertically
         Column(
@@ -68,8 +79,16 @@ fun Greeting(name: String, context: Context? = null, modifier: Modifier = Modifi
             // Button positioned at the bottom
             Button(
                 onClick = {
-                    val intent = Intent(context, TakeRecordsActivity::class.java)
-                    context.startActivity(intent)
+                    CoroutineScope(Dispatchers.IO).launch {
+                        uniqueId = fetchUniqueId()
+                        withContext(Dispatchers.Main) {
+                            uniqueId?.let {
+                                val intent = Intent(context, TakeRecordsActivity::class.java)
+                                intent.putExtra("UNIQUE_ID", it)
+                                context.startActivity(intent)
+                            }
+                        }
+                    }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
                 modifier = Modifier
@@ -79,8 +98,20 @@ fun Greeting(name: String, context: Context? = null, modifier: Modifier = Modifi
                 Text(text = "ПОНЯТНО, НАЧИНАЕМ")
             }
         }
-}
 
+}
+suspend fun fetchUniqueId(): String? {
+    val client = OkHttpClient()
+    val request = Request.Builder()
+        .url("http://10.0.2.2:5000/getUniqueId")
+        .build()
+
+    return client.newCall(request).execute().use { response ->
+        if (response.isSuccessful) {
+            response.body?.string()
+        } else null
+    }
+}
 
 @Preview(showBackground = true)
 @Composable
