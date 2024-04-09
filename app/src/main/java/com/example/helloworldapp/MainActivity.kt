@@ -3,6 +3,7 @@ package com.example.helloworldapp
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -27,12 +28,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.helloworldapp.ui.theme.HelloWorldAppTheme
+import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
+
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,18 +106,32 @@ fun Greeting(name: String, context: Context? = null, modifier: Modifier = Modifi
         }
 
 }
-suspend fun fetchUniqueId(): String? {
+
+
+
+suspend fun fetchUniqueId(): String? = withContext(Dispatchers.IO) {
     val client = OkHttpClient()
+    val deviceInfo = mapOf(
+        "model" to Build.MODEL,
+        "manufacturer" to Build.MANUFACTURER
+    )
+    val requestBody = RequestBody.create(
+        "application/json; charset=utf-8".toMediaTypeOrNull(),
+        Gson().toJson(deviceInfo)
+    )
+
     val request = Request.Builder()
         .url("http://10.0.2.2:5000/getUniqueId")
+        .post(requestBody)
         .build()
 
-    return client.newCall(request).execute().use { response ->
+    client.newCall(request).execute().use { response ->
         if (response.isSuccessful) {
             response.body?.string()
         } else null
     }
 }
+
 
 @Preview(showBackground = true)
 @Composable

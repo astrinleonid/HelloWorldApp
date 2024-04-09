@@ -128,7 +128,7 @@ class RecordActivity : ComponentActivity() {
                     sendAudioDataToServer(oneSecondData.toByteArray())
                     oneSecondData.close()
                     chunk_index += 1
-                    if (chunk_index > 5) {
+                    if (chunk_index > 10) {
                         stopRecording("timeout")
                     }
                 }
@@ -206,8 +206,7 @@ class RecordActivity : ComponentActivity() {
     override fun onBackPressed() {
         // If the user presses back, return "0"
         stopRecording("return")
-        sendResult()
-        super.onBackPressed()
+//        super.onBackPressed()
     }
 }
 
