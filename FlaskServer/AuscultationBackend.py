@@ -3,6 +3,7 @@ import os
 from werkzeug.utils import secure_filename
 import librosa  # You might need to install this library for handling audio files
 from datetime import date
+import random
 
 
 
@@ -93,7 +94,7 @@ def upload_file():
         return jsonify({"error": "No file part"}), 400
     file = request.files.get('file')
     button_number = request.form.get('button_number')
-    record_quality = '0' if int(button_number) == 2 else '1'
+    record_quality = random.choice('0','1')
     ID = request.form.get('record_id')
     print(f"request received ID {ID} button {button_number} response {record_quality}")
     if ID not in records:
