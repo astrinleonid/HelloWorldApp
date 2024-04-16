@@ -1,10 +1,12 @@
 package com.example.helloworldapp
 
+import AppConfig
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Bundle
 import android.util.Log
@@ -124,8 +126,14 @@ class RecordActivity : ComponentActivity() {
                             oneSecondData.write(audioData, 0, readResult)
                         }
                     }
-                    // After collecting 1 second of audio, send it to the server
-                    sendAudioDataToServer(oneSecondData.toByteArray())
+                    // After collecting 1 second of audio, convert it to wav
+                    val wavData = WavConverter.pcmToWav(oneSecondData.toByteArray(), sampleRate, 1, 16)
+                    oneSecondData.close()
+
+                    // After converting to WAV format, send it to the server
+                    sendAudioDataToServer(wavData)
+                    // send it to the server
+            //        sendAudioDataToServer(oneSecondData.toByteArray())
                     oneSecondData.close()
                     chunk_index += 1
                     if (chunk_index > 10) {
@@ -160,7 +168,7 @@ class RecordActivity : ComponentActivity() {
             .build()
 
         val request = Request.Builder()
-            .url("http://10.0.2.2:5000/upload")
+            .url("http://${AppConfig.serverIP}:5000/upload")
             .post(requestBody)
             .build()
 
@@ -180,8 +188,8 @@ class RecordActivity : ComponentActivity() {
                         val responseBody = it.body?.string()
                         // Assuming the server response includes a JSON object with a "message" field
                         val message = JSONObject(responseBody).getString("message")
-                        if (message == "Record sucsessfull") {
-                            stopRecording("sucsess")
+                        if (message == "Record sucsessfull" && isRecording) {
+                            stopRecording("success")
                         } else {
                         }
                     }
@@ -190,12 +198,64 @@ class RecordActivity : ComponentActivity() {
         })
     }
 
+    private fun sendSaveCommandToServer() {
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("button_number", buttonNumber)
+            .addFormDataPart("record_id", recordId)
+            .build()
+
+        val request = Request.Builder()
+            .url("http://${AppConfig.serverIP}:5000/save_record")
+            .post(requestBody)
+            .build()
+
+        OkHttpClient().newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("RecordActivity", "Failed to invoke record saving", e)
+                // Handle failure, such as by notifying the user
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!it.isSuccessful) {
+                        Log.e("RecordActivity", "Server error: ${response.message}")
+                        // Handle server error, e.g., update UI to show error message
+                    } else {
+                    }
+                }
+            }
+        })
+    }
     private fun stopRecording(recording_result: String) {
         isRecording = false // This will cause the loop in startRecording() to end
-        if (!(recording_result == "sucsess")) {
-            result = "0"
+
+        when (recording_result) {
+            "success" -> {
+                result = buttonNumber // or any logic you have for successful recording
+                playSuccessSound()
+                sendSaveCommandToServer()
+            }
+            "timeout" -> {
+                result = "0"
+                playTimeoutSound()
+            }
+            // Optionally handle other conditions
         }
     }
+
+    private fun playSuccessSound() {
+        val mediaPlayer = MediaPlayer.create(this, R.raw.beep_2)
+        mediaPlayer.setOnCompletionListener { mp -> mp.release() }
+        mediaPlayer.start()
+    }
+
+    private fun playTimeoutSound() {
+        val mediaPlayer = MediaPlayer.create(this, R.raw.beep)
+        mediaPlayer.setOnCompletionListener { mp -> mp.release() }
+        mediaPlayer.start()
+    }
+
     private fun sendResult() {
         val data = Intent().apply {
             putExtra("button_number", result)
@@ -227,5 +287,46 @@ fun RecordingScreen(buttonNumber: String) {
     }
 }
 
+object WavConverter {
+    fun pcmToWav(pcmData: ByteArray, sampleRate: Int, channels: Int, bitDepth: Int): ByteArray {
+        val out = ByteArrayOutputStream()
+        writeWavHeader(out, pcmData.size, sampleRate, channels, bitDepth)
+        out.write(pcmData)
+        return out.toByteArray()
+    }
 
+    private fun writeWavHeader(out: ByteArrayOutputStream, pcmDataLength: Int, sampleRate: Int, channels: Int, bitDepth: Int) {
+        val totalDataLen = pcmDataLength + 36
+        val byteRate = sampleRate * channels * bitDepth / 8
 
+        val header = ByteArray(44)
+        header[0] = 'R'.code.toByte();  header[1] = 'I'.code.toByte();  header[2] = 'F'.code.toByte();  header[3] = 'F'.code.toByte() // RIFF/WAVE header
+        header[4] = (totalDataLen and 0xff).toByte()
+        header[5] = ((totalDataLen shr 8) and 0xff).toByte()
+        header[6] = ((totalDataLen shr 16) and 0xff).toByte()
+        header[7] = ((totalDataLen shr 24) and 0xff).toByte()
+        header[8] = 'W'.code.toByte();  header[9] = 'A'.code.toByte();  header[10] = 'V'.code.toByte();  header[11] = 'E'.code.toByte()
+        header[12] = 'f'.code.toByte();  header[13] = 'm'.code.toByte();  header[14] = 't'.code.toByte();  header[15] = ' '.code.toByte()
+        header[16] = 16;  header[17] = 0;  header[18] = 0;  header[19] = 0   // size of 'fmt ' chunk
+        header[20] = 1;  header[21] = 0;  header[22] = channels.toByte()
+        header[23] = 0
+        header[24] = (sampleRate and 0xff).toByte()
+        header[25] = ((sampleRate shr 8) and 0xff).toByte()
+        header[26] = ((sampleRate shr 16) and 0xff).toByte()
+        header[27] = ((sampleRate shr 24) and 0xff).toByte()
+        header[28] = (byteRate and 0xff).toByte()
+        header[29] = ((byteRate shr 8) and 0xff).toByte()
+        header[30] = ((byteRate shr 16) and 0xff).toByte()
+        header[31] = ((byteRate shr 24) and 0xff).toByte()
+        header[32] = (2 * 16 / 8).toByte()  // block align
+        header[33] = 0
+        header[34] = bitDepth.toByte()  // bits per sample
+        header[35] = 0
+        header[36] = 'd'.code.toByte();  header[37] = 'a'.code.toByte();  header[38] = 't'.code.toByte();  header[39] = 'a'.code.toByte()
+        header[40] = (pcmDataLength and 0xff).toByte()
+        header[41] = ((pcmDataLength shr 8) and 0xff).toByte()
+        header[42] = ((pcmDataLength shr 16) and 0xff).toByte()
+        header[43] = ((pcmDataLength shr 24) and 0xff).toByte()
+        out.write(header, 0, header.size)
+    }
+}
