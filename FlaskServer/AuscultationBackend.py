@@ -40,7 +40,7 @@ class Record:
         self.chunk_quality = []
 
     def get_filename(self, point_number, sep = 'point'):
-        return f"record{date.today()}ID{self.id}{sep}{point_number}"
+        return f"record{date.today()}ID{self.id}{sep}{point_number}.wav"
 
     def get_good_subseq_ind(self, subs_len):
         ones = ''.join(['1' for i in range(subs_len)])

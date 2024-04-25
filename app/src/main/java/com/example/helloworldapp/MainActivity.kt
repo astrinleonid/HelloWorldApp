@@ -6,17 +6,21 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.helloworldapp.ui.theme.HelloWorldAppTheme
@@ -43,29 +49,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
-
-
-//class MainActivity : ComponentActivity() {
-//
-//    override fun onCreate(savedInstanceState: Bundle?) {
-//        super.onCreate(savedInstanceState)
-//        setContent {
-//            HelloWorldAppTheme {
-//                // A surface container with blue background
-//                Surface(
-//                    modifier = Modifier.fillMaxSize(),
-//                    color = MaterialTheme.colorScheme.primary // Change this to your desired blue color
-//                ) {
-//                    Greeting("Android", context = this)
-//                }
-//            }
-//        }
-//    }
-//}
+import okhttp3.Response
+import java.io.IOException
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,7 +92,7 @@ fun TopBar() {
     val context = LocalContext.current
 
     TopAppBar(
-        title = { Text("Welcome") },
+        title = { Text("beta app, server IP ${AppConfig.serverIP}") },
         actions = {
             IconButton(onClick = { showSettingsDialog = true }) {
                 Icon(Icons.Filled.Settings, contentDescription = "Settings")
@@ -116,23 +107,58 @@ fun TopBar() {
 
 @Composable
 fun SettingsDialog(context: Context, onDismiss: () -> Unit) {
-    var ipText by remember { mutableStateOf("") }
+    var ipText by remember { mutableStateOf("74.208.75.175") }
+    var portText by remember { mutableStateOf("5000") }
+    var timeoutText by remember { mutableStateOf("10") }
+    var seglenText by remember { mutableStateOf("1361") }
+
+    var protocolChecked by remember { mutableStateOf(false) } // False for HTTP, true for HTTPS
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Enter Server IP") },
+        title = { Text("Settings") },
         text = {
-            TextField(
-                value = ipText,
-                onValueChange = { ipText = it },
-                label = { Text("IP Address") }
-            )
+            Column {
+                TextField(
+                    value = ipText,
+                    onValueChange = { ipText = it },
+                    label = { Text("Server IP Address") }
+                )
+                TextField(
+                    value = portText,
+                    onValueChange = { portText = it },
+                    label = { Text("Port") },
+                    keyboardOptions = KeyboardOptions.Default.copy(
+                            keyboardType = KeyboardType.Number
+                            )
+                )
+                TextField(
+                    value = timeoutText,
+                    onValueChange = { timeoutText = it },
+                    label = { Text("Record timeout") },
+                    keyboardOptions = KeyboardOptions.Default.copy(
+                        keyboardType = KeyboardType.Number
+                    )
+                )
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = protocolChecked,
+                        onCheckedChange = { protocolChecked = it }
+                    )
+                    Text("Use HTTPS")
+                }
+            }
         },
         confirmButton = {
             Button(onClick = {
-                AppConfig.serverIP = ipText
+                val protocol = if (protocolChecked) "https" else "http"
+                AppConfig.serverIP = "$protocol://$ipText:$portText"
+                val timeout = timeoutText.toIntOrNull() ?: 10 // Default to 30 seconds if invalid or empty
+                AppConfig.timeOut = timeout
                 onDismiss()
             }) {
-                Text("OK")
+                Text("Save")
             }
         },
         dismissButton = {
@@ -151,45 +177,76 @@ fun Greeting(name: String, context: Context? = null, modifier: Modifier = Modifi
         var uniqueId by remember { mutableStateOf<String?>(null) }
         val showDialog = remember { mutableStateOf(false) }
         val ipText = remember { mutableStateOf("") }
+        var serverErrorDialog by remember { mutableStateOf(false) }
 
 
         // Column composable to stack items vertically
         Column(
             modifier = modifier.fillMaxSize(), // Fill the parent's size
-            verticalArrangement = Arrangement.SpaceBetween, // Space out the children as much as possible
+//            verticalArrangement = Arrangement.SpaceBetween, // Space out the children as much as possible
             horizontalAlignment = Alignment.CenterHorizontally // Center items horizontally
         ) {
             Text(
-                text = "Карманный стетоскоп ТЕПРО \n ip${AppConfig.serverIP}",
+                text = "ТЕПРО",
+//                style = TextStyle(fontSize = 32.sp), // Set font size to 16sp
+                textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 32.dp) // Top padding for aesthetic spacing
+            )
+            Text(
+                text = "Карманный стетоскоп",
+//                style = TextStyle(fontSize = 20.sp), // Set font size to 16sp
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 2.dp, bottom = 24.dp) // Top padding for aesthetic spacing
             )
 
             // Introductory Text
             Text(
                 text = "Нажми на фиолетовый круг и прижми телефон микрофоном к соответствующей области на теле. Удерживай телефон плотно прижав его к телу и не шевеля, пока не услышишь короткий двойной сигнал. Длинный сигнал означает, что запись не удалась, повтори процедуру",
-                modifier = Modifier.padding(top = 32.dp) // Top padding for aesthetic spacing
+                textAlign = TextAlign.Center,
+//                style = TextStyle(fontSize = 24.sp), // Set font size to 16sp
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp)
+//                modifier = Modifier.padding(top = 32.dp) // Top padding for aesthetic spacing
             )
 
             // Button positioned at the bottom
             Button(
                 onClick = {
-                    CoroutineScope(Dispatchers.IO).launch {
-                        uniqueId = fetchUniqueId("10.0.2.2")
-                        withContext(Dispatchers.Main) {
-                            uniqueId?.let {
-                                val intent = Intent(context, TakeRecordsActivity::class.java)
-                                intent.putExtra("UNIQUE_ID", it)
-                                context.startActivity(intent)
+                    checkServerResponse() { isSuccessful ->
+                        if (isSuccessful) {
+                            CoroutineScope(Dispatchers.IO).launch {
+                                uniqueId = fetchUniqueId()
+                                withContext(Dispatchers.Main) {
+                                    uniqueId?.let {
+                                        val intent = Intent(context, TakeRecordsFrontActivity::class.java)
+                                        intent.putExtra("UNIQUE_ID", it)
+                                        context.startActivity(intent)
+                                    }
+                                }
                             }
+                        } else {
+                            serverErrorDialog = true
                         }
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
                 modifier = Modifier
-                    .padding(16.dp) // Padding around the button for aesthetic spacing
-                    .align(Alignment.CenterHorizontally) // Ensure the button is centered horizontally within the Column
+                    .padding(16.dp)
+                    .align(Alignment.CenterHorizontally)
             ) {
                 Text(text = "ПОНЯТНО, НАЧИНАЕМ")
+
+            }
+            if (serverErrorDialog) {
+                    AlertDialog(
+                        onDismissRequest = { serverErrorDialog = false },
+                        title = { Text("Server Error") },
+                        text = { Text("Cannot connect to the server. Please check your network connection and try again. ${AppConfig.serverIP}") },
+                        confirmButton = {
+                            Button(onClick = { serverErrorDialog = false }) {
+                                Text("OK")
+                            }
+                        }
+                    )
             }
         }
     Button(
@@ -231,9 +288,23 @@ fun Greeting(name: String, context: Context? = null, modifier: Modifier = Modifi
     }
 }
 
+fun checkServerResponse(callback: (Boolean) -> Unit) {
+    val client = OkHttpClient()
+    val request = Request.Builder()
+        .url("${AppConfig.serverIP}/checkConnection")
+        .build()
+    client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                callback(false)
+            }
+            override fun onResponse(call: Call, response: Response) {
+                Log.e("MainActivity", "Server connection test success: ${response.message}")
+                callback(response.isSuccessful)
+            }
+    })
+}
 
-
-suspend fun fetchUniqueId(ip : String): String? = withContext(Dispatchers.IO) {
+suspend fun fetchUniqueId(): String? = withContext(Dispatchers.IO) {
 
     val client = OkHttpClient()
     val deviceInfo = mapOf(
@@ -246,12 +317,13 @@ suspend fun fetchUniqueId(ip : String): String? = withContext(Dispatchers.IO) {
     )
 
     val request = Request.Builder()
-        .url("http://${AppConfig.serverIP}:5000/getUniqueId")
+        .url("${AppConfig.serverIP}/getUniqueId")
         .post(requestBody)
         .build()
 
     client.newCall(request).execute().use { response ->
         if (response.isSuccessful) {
+            Log.e("MainActivity", "Server success: ${response.message}")
             response.body?.string()
         } else null
     }

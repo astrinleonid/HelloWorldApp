@@ -11,23 +11,28 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,8 +55,8 @@ class TakeRecordsActivity : ComponentActivity() {
             val data = result.data
             val buttonNumber = data?.getStringExtra("button_number")?.toIntOrNull()
             buttonNumber?.let {
-                if (it in 1..buttonColors.size) {
-                    buttonColors[it - 1] = true // Update the color state for the button
+                if (it in 5..buttonColors.size + 4) {
+                    buttonColors[it - 5] = true // Update the color state for the button
                 }
             }
         }
@@ -72,61 +77,65 @@ class TakeRecordsActivity : ComponentActivity() {
         showDialog.value = true
 //        super.onBackPressed()
     }
+
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun MainContent(uniqueId: String?,
                     buttonColors: SnapshotStateList<Boolean>, // Adjusted type here
                     getResult: ActivityResultLauncher<Intent>) {
 
         val context = LocalContext.current
-//        val showDialog = remember { mutableStateOf(false) } // State for controlling the visibility of the dialog
 
         if (buttonColors.all { it }) {
-//            onAllGreen() // If all are green, execute the passed action
             showCenteredToast(context, "ЗАПИСЬ СОХРАНЕНА")
             context.startActivity(Intent(context, MainActivity::class.java))
         } else {
-
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                // Background Image
-                Image(
-                    painter = painterResource(id = R.drawable.back_background),
-                    contentDescription = "Background Image",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-                // Using Column for vertical arrangement
-                Column(
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { Text("Запись точек на спине") },
+                        actions = {
+                            PlaybackButton(context = context, getResult = getResult, uniqueId = uniqueId)
+                        }
+                    )
+                },
+                bottomBar = {
+                    DoneButton {
+                        showDialog.value = true
+                    }
+                }
+            ) { paddingValues ->
+                Box(
                     modifier = Modifier
+                        .padding(paddingValues)
                         .fillMaxSize()
-                        .padding(16.dp), // Apply padding to the Column for overall padding
-                    verticalArrangement = Arrangement.SpaceBetween, // Space between items, pushing the button to the bottom
-                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.back_background),
+                        contentDescription = "Background Image",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                    ChangeSideButton(context = context, getResult = getResult, uniqueId = uniqueId)
                     ButtonGrid(
                         context = context,
                         buttonColors = buttonColors,
                         getResult = getResult,
                         uniqueId = uniqueId,
                         modifier = Modifier
-                                .size(width = 300.dp, height = 400.dp)
-                                .offset(y = (180).dp)
+                            .align(Alignment.TopCenter)
+                            .padding(top = 50.dp)
                     )
 
-                    // Spacer to optionally add space above the button if needed
-                    Spacer(modifier = Modifier.weight(1f, fill = false))
-
-                    DoneButton { showDialog.value = true }
-                }
-
-                // Confirmation Dialog
-                if (showDialog.value) {
-                    ConfirmationDialog(
-                        onConfirm = {
-                            showDialog.value = false
-                            context.startActivity(Intent(context, MainActivity::class.java))
-                        },
-                        onDismiss = { showDialog.value = false }
-                    )
+                    if (showDialog.value) {
+                        ConfirmationDialog(
+                            onConfirm = {
+                                showDialog.value = false
+                                context.startActivity(Intent(context, MainActivity::class.java))
+                            },
+                            onDismiss = { showDialog.value = false }
+                        )
+                    }
                 }
             }
         }
@@ -139,14 +148,19 @@ fun showCenteredToast(context: Context, message: String) {
     toast.show()
 }
 
+
+
 @Composable
 fun ButtonGrid(context: Context,  buttonColors: List<Boolean>, getResult: ActivityResultLauncher<Intent>,  modifier: Modifier = Modifier, uniqueId: String?) {
     Column(
         verticalArrangement = Arrangement.SpaceAround,
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.fillMaxSize()
+        modifier = modifier
+            .padding(horizontal = 32.dp)
+            .padding(top = 96.dp)
+            .fillMaxWidth()
     ) {
-        (1..6).chunked(2).forEach { pair ->
+        (5..10).chunked(2).forEach { pair ->
             ButtonRow(buttonLabels = pair, buttonColors = buttonColors, getResult = getResult, context = context, uniqueId = uniqueId)
         }
     }
@@ -158,10 +172,12 @@ fun ButtonRow(buttonLabels: List<Int>, buttonColors: List<Boolean>, getResult: A
     Row(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
     ) {
         buttonLabels.forEach {label ->
-            val isSelected = buttonColors[label - 1]
+            val isSelected = buttonColors[label - 5]
             RoundButton(label = "$label", isSelected = isSelected, getResult = getResult, context = context, uniqueId = uniqueId)
         }
     }
@@ -178,13 +194,8 @@ fun RoundButton(label: String, isSelected: Boolean, getResult: ActivityResultLau
             val intent = Intent(context, RecordActivity::class.java).apply {
                 putExtra("button_number", label)
                 putExtra("UNIQUE_ID", uniqueId)
-//                uniqueId?.let {
-//                    putExtra("UNIQUE_ID", it) // Pass the unique ID to RecordActivity
-//                }
             }
             getResult.launch(intent)
-            // For demonstration, let's assume you want to toggle the color on click
-            // This is where you would update the state based on the result from RecordActivity
         },
         shape = CircleShape,
         modifier = Modifier
@@ -196,18 +207,6 @@ fun RoundButton(label: String, isSelected: Boolean, getResult: ActivityResultLau
     }
 }
 
-@Composable
-fun DoneButton(onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp), // Adjust padding as necessary
-        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-    ) {
-        Text("DONE", color = MaterialTheme.colorScheme.onPrimary)
-    }
-}
 
 
 @Composable
@@ -231,5 +230,60 @@ fun ConfirmationDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
             }
         }
     )
+}
+
+@Composable
+fun DoneButton(onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp), // Adjust padding as necessary
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+    ) {
+        Text("DONE", color = MaterialTheme.colorScheme.onPrimary)
+    }
+}
+
+@Composable
+fun PlaybackButton(context: Context, getResult: ActivityResultLauncher<Intent>, uniqueId: String?) {
+    Button(
+        onClick = {
+            // Intent to start the playback activity
+            val intent = Intent(context, PlayRecordsActivity::class.java).apply {
+                putExtra("UNIQUE_ID", uniqueId)
+            }
+            context.startActivity(intent)
+        },
+        modifier = Modifier
+            .height(32.dp)  // Sets the height of the button
+            .width(120.dp),  // Sets the width of the button to make it more elongated
+        shape = RoundedCornerShape(12.dp),  // Sets the corners to be rounded, 12.dp is a moderate roundness
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+    ) {
+        Text(text = "Play", color = MaterialTheme.colorScheme.onPrimary)  // Ensures text color contrasts with button color
+    }
+}
+
+@Composable
+fun ChangeSideButton(context: Context, getResult: ActivityResultLauncher<Intent>, uniqueId: String?) {
+    Button(
+        onClick = {
+            // Intent to start the playback activity
+            val intent = Intent(context, TakeRecordsFrontActivity::class.java).apply {
+                putExtra("UNIQUE_ID", uniqueId)
+            }
+            context.startActivity(intent)
+        },
+        modifier = Modifier
+            .height(180.dp)  // Sets the height of the button
+            .width(160.dp)
+            .padding(32.dp) ,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(2.dp, Color.Black),  // Black border
+        colors = ButtonDefaults.buttonColors(containerColor = Color.White)  // White background
+    ) {
+        Text(text = "ГРУДЬ", color = Color.Black)
+    }
 }
 

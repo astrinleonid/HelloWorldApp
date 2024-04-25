@@ -42,13 +42,15 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import okhttp3.internal.wait
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
 
 class RecordActivity : ComponentActivity() {
 
-    private val sampleRate = 44100 // Sample rate in Hz
+    private val sampleRate = 22050 // Sample rate in Hz
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
     private var bufferSize: Int = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
@@ -57,6 +59,10 @@ class RecordActivity : ComponentActivity() {
     private var result = "0"
     private var recordId = "111111"
     private var buttonNumber = "0"
+    private var isRecording = false
+    private val activeRequests = AtomicInteger(0)
+    private var recording_result = "fail"
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,9 +106,6 @@ class RecordActivity : ComponentActivity() {
         }
     }
 
-
-    private var isRecording = false
-
     private fun startRecording() {
 
 
@@ -119,7 +122,7 @@ class RecordActivity : ComponentActivity() {
                     val oneSecondData = ByteArrayOutputStream()
                     val audioData = ByteArray(bufferSize)
                     val startTime = System.currentTimeMillis()
-                    while (System.currentTimeMillis() - startTime < 1000) { // Capture chunks for roughly 1000 milliseconds
+                    while (System.currentTimeMillis() - startTime < 1361) { // Capture chunks for roughly 1000 milliseconds
                         val readResult = audioRecord?.read(audioData, 0, audioData.size)
                             ?: AudioRecord.ERROR_INVALID_OPERATION
                         if (readResult > 0) {
@@ -130,16 +133,23 @@ class RecordActivity : ComponentActivity() {
                     val wavData = WavConverter.pcmToWav(oneSecondData.toByteArray(), sampleRate, 1, 16)
                     oneSecondData.close()
 
-                    // After converting to WAV format, send it to the server
                     sendAudioDataToServer(wavData)
-                    // send it to the server
-            //        sendAudioDataToServer(oneSecondData.toByteArray())
+
                     oneSecondData.close()
                     chunk_index += 1
-                    if (chunk_index > 10) {
-                        stopRecording("timeout")
+                    if (chunk_index > AppConfig.timeOut) {
+                        recording_result = "timeout"
+                        stopRecording()
                     }
                 }
+                val startTime = System.currentTimeMillis()
+                while (System.currentTimeMillis() - startTime < 2000 && activeRequests.get() > 0) {
+
+                }
+
+                sendSaveCommandToServer(recording_result)
+                playSound(recording_result)
+
                 audioRecord?.stop()
                 audioRecord?.release()
 
@@ -159,6 +169,7 @@ class RecordActivity : ComponentActivity() {
     }
 
     private fun sendAudioDataToServer(audioData: ByteArray) {
+
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("file", "audio_record.3gp",
@@ -168,18 +179,21 @@ class RecordActivity : ComponentActivity() {
             .build()
 
         val request = Request.Builder()
-            .url("http://${AppConfig.serverIP}:5000/upload")
+            .url("${AppConfig.serverIP}/upload")
             .post(requestBody)
             .build()
+
+        activeRequests.incrementAndGet()
 
         OkHttpClient().newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 Log.e("RecordActivity", "Failed to upload audio data", e)
-                // Handle failure, such as by notifying the user
+                activeRequests.decrementAndGet()
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
+                    activeRequests.decrementAndGet()
                     if (!it.isSuccessful) {
                         Log.e("RecordActivity", "Server error: ${response.message}")
                         // Handle server error, e.g., update UI to show error message
@@ -189,16 +203,20 @@ class RecordActivity : ComponentActivity() {
                         // Assuming the server response includes a JSON object with a "message" field
                         val message = JSONObject(responseBody).getString("message")
                         if (message == "Record sucsessfull" && isRecording) {
-                            stopRecording("success")
+                            recording_result = "success"
+                            stopRecording()
                         } else {
                         }
                     }
+
                 }
             }
         })
     }
 
-    private fun sendSaveCommandToServer() {
+    private fun sendSaveCommandToServer(result: String) {
+
+        val client = OkHttpClient()
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("button_number", buttonNumber)
@@ -206,56 +224,51 @@ class RecordActivity : ComponentActivity() {
             .build()
 
         val request = Request.Builder()
-            .url("http://${AppConfig.serverIP}:5000/save_record")
+            .url("${AppConfig.serverIP}/save_record")
             .post(requestBody)
             .build()
 
-        OkHttpClient().newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e("RecordActivity", "Failed to invoke record saving", e)
-                // Handle failure, such as by notifying the user
-            }
+//        client.newCall(request).execute().use { response ->
+//            if (response.isSuccessful) {
+//                Log.e("MainActivity", "Server success: ${response.message}")
+//                response.body?.string()
+//            } else null
+//        }
 
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (!it.isSuccessful) {
-                        Log.e("RecordActivity", "Server error: ${response.message}")
-                        // Handle server error, e.g., update UI to show error message
-                    } else {
-                    }
-                }
-            }
-        })
+        client.newCall(request).execute().use { response ->
+            if (response.isSuccessful) {
+                Log.e("RecordActivity", "Server success: ${response.message}")
+                response.body?.string()
+            } else null
+        }
+
     }
-    private fun stopRecording(recording_result: String) {
+    private fun stopRecording() {
         isRecording = false // This will cause the loop in startRecording() to end
 
         when (recording_result) {
             "success" -> {
                 result = buttonNumber // or any logic you have for successful recording
-                playSuccessSound()
-                sendSaveCommandToServer()
             }
             "timeout" -> {
                 result = "0"
-                playTimeoutSound()
             }
             // Optionally handle other conditions
         }
     }
 
-    private fun playSuccessSound() {
-        val mediaPlayer = MediaPlayer.create(this, R.raw.beep_2)
-        mediaPlayer.setOnCompletionListener { mp -> mp.release() }
+
+    private fun playSound(recording_result: String) {
+        // Declare mediaPlayer variable outside of the if/else scope
+        val mediaPlayer: MediaPlayer = if (recording_result == "success") {
+            MediaPlayer.create(this, R.raw.beep_2) // Success sound
+        } else {
+            MediaPlayer.create(this, R.raw.beep) // Timeout or other failure sound
+        }
+
+        mediaPlayer.setOnCompletionListener { mp -> mp.release()}
         mediaPlayer.start()
     }
-
-    private fun playTimeoutSound() {
-        val mediaPlayer = MediaPlayer.create(this, R.raw.beep)
-        mediaPlayer.setOnCompletionListener { mp -> mp.release() }
-        mediaPlayer.start()
-    }
-
     private fun sendResult() {
         val data = Intent().apply {
             putExtra("button_number", result)
@@ -265,7 +278,8 @@ class RecordActivity : ComponentActivity() {
 
     override fun onBackPressed() {
         // If the user presses back, return "0"
-        stopRecording("return")
+        recording_result = "return"
+        stopRecording()
 //        super.onBackPressed()
     }
 }
