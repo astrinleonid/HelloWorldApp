@@ -110,7 +110,8 @@ fun SettingsDialog(context: Context, onDismiss: () -> Unit) {
     var ipText by remember { mutableStateOf("74.208.75.175") }
     var portText by remember { mutableStateOf("5000") }
     var timeoutText by remember { mutableStateOf("10") }
-    var seglenText by remember { mutableStateOf("1361") }
+    var numChunksText by remember { mutableStateOf("3") }
+    var chunkLengthText by remember { mutableStateOf("1361") }
 
     var protocolChecked by remember { mutableStateOf(false) } // False for HTTP, true for HTTPS
 
@@ -141,6 +142,24 @@ fun SettingsDialog(context: Context, onDismiss: () -> Unit) {
                     )
                 )
 
+                TextField(
+                    value = numChunksText,
+                    onValueChange = { numChunksText = it },
+                    label = { Text("Good segments") },
+                    keyboardOptions = KeyboardOptions.Default.copy(
+                        keyboardType = KeyboardType.Number
+                    )
+                )
+
+                TextField(
+                    value = chunkLengthText,
+                    onValueChange = { chunkLengthText = it },
+                    label = { Text("Segment length") },
+                    keyboardOptions = KeyboardOptions.Default.copy(
+                        keyboardType = KeyboardType.Number
+                    )
+                )
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = protocolChecked,
@@ -156,6 +175,10 @@ fun SettingsDialog(context: Context, onDismiss: () -> Unit) {
                 AppConfig.serverIP = "$protocol://$ipText:$portText"
                 val timeout = timeoutText.toIntOrNull() ?: 10 // Default to 30 seconds if invalid or empty
                 AppConfig.timeOut = timeout
+                val numChunks = numChunksText.toIntOrNull() ?: 10 // Default to 30 seconds if invalid or empty
+                AppConfig.numChunks = numChunks
+                val chunkLength = chunkLengthText.toIntOrNull() ?: 10 // Default to 30 seconds if invalid or empty
+                AppConfig.segmentLength = chunkLength
                 onDismiss()
             }) {
                 Text("Save")

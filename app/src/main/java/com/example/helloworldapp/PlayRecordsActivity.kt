@@ -1,6 +1,7 @@
 package com.example.helloworldapp
 
 import AppConfig
+import android.app.Activity
 import android.content.Context
 import android.media.MediaPlayer
 import android.os.Bundle
@@ -12,19 +13,25 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ListView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
+import java.io.IOException
 import java.net.URLEncoder
 
 class FileListAdapter(private val context: Context,
-                      private val fileList: List<String>,
+                      private val fileList: MutableList<String>,
                       private val folderId: String,
-                      private val textViewStatus: TextView
+                      private val textViewStatus: TextView,
+                      private val onDeleteSuccess: () -> Unit
                       ) : ArrayAdapter<String>(context, 0, fileList) {
     private var mediaPlayer: MediaPlayer? = null
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
@@ -80,13 +87,38 @@ class FileListAdapter(private val context: Context,
     }
 
     private fun deleteFile(folderId: String, fileName: String) {
-
+        val client = OkHttpClient()
         val encodedFolderId = URLEncoder.encode(folderId, "UTF-8")
         val encodedFileName = URLEncoder.encode(fileName, "UTF-8")
-        val url =
-            "${AppConfig.serverIP}/file_delete?fileName=$encodedFileName&folderId=$encodedFolderId"
 
+        val request = Request.Builder()
+            .url("${AppConfig.serverIP}/file_delete?fileName=$encodedFileName&folderId=$encodedFolderId")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("PlayRecordsActivity", "Failed to delete file: ", e)
+                // Optionally, handle failure on UI thread if needed
+                (context as Activity).runOnUiThread {
+                    Toast.makeText(context, "Failed to delete file", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                if (response.isSuccessful) {
+                    Log.i("PlayRecordsActivity", "File successfully deleted")
+                    (context as Activity).runOnUiThread {
+                        fileList.remove(fileName)  // Modify list
+                        notifyDataSetChanged()  // Notify adapter
+                        onDeleteSuccess()  // Refresh list, ensure this does not finish activity
+                    }
+                } else {
+                    Log.e("PlayRecordsActivity", "Error deleting file: ${response.message}")
+                }
+            }
+        })
     }
+
 }
 
 
@@ -134,8 +166,23 @@ class PlayRecordsActivity : AppCompatActivity() {
     }
 
     private fun setupListView(fileList: List<String>) {
-        val adapter = FileListAdapter(this, fileList, folderId, textViewStatus)
+        val mutableFileList = fileList.toMutableList() // Convert to MutableList
+        val adapter = FileListAdapter(this, mutableFileList, folderId, textViewStatus) {
+            refreshFileList()  // Call refresh when a file is successfully deleted
+        }
         listView.adapter = adapter
+    }
+
+    private fun refreshFileList() {
+        CoroutineScope(Dispatchers.IO).launch {
+            val filesJson = fetchFileList(folderId)
+            val updatedFileList = filesJson.split(" ").filter { it.isNotEmpty() }.toMutableList()
+            withContext(Dispatchers.Main) {
+                (listView.adapter as FileListAdapter).clear()
+                (listView.adapter as FileListAdapter).addAll(updatedFileList)
+                (listView.adapter as FileListAdapter).notifyDataSetChanged()
+            }
+        }
     }
 
 

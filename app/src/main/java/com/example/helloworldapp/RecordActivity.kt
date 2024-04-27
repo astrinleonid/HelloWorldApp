@@ -42,7 +42,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import okhttp3.internal.wait
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -62,6 +61,7 @@ class RecordActivity : ComponentActivity() {
     private var isRecording = false
     private val activeRequests = AtomicInteger(0)
     private var recording_result = "fail"
+    private var recordingId = "0"
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -112,6 +112,7 @@ class RecordActivity : ComponentActivity() {
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 return
             }
+            getRecordingId()
             audioRecord = AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, channelConfig, audioFormat, bufferSize)
             audioRecord?.startRecording()
             isRecording = true
@@ -122,7 +123,7 @@ class RecordActivity : ComponentActivity() {
                     val oneSecondData = ByteArrayOutputStream()
                     val audioData = ByteArray(bufferSize)
                     val startTime = System.currentTimeMillis()
-                    while (System.currentTimeMillis() - startTime < 1361) { // Capture chunks for roughly 1000 milliseconds
+                    while (System.currentTimeMillis() - startTime < AppConfig.segmentLength) { // Capture chunks for roughly 1000 milliseconds
                         val readResult = audioRecord?.read(audioData, 0, audioData.size)
                             ?: AudioRecord.ERROR_INVALID_OPERATION
                         if (readResult > 0) {
@@ -147,7 +148,7 @@ class RecordActivity : ComponentActivity() {
 
                 }
 
-                sendSaveCommandToServer(recording_result)
+                sendSaveCommandToServer(result)
                 playSound(recording_result)
 
                 audioRecord?.stop()
@@ -157,6 +158,8 @@ class RecordActivity : ComponentActivity() {
                 finish()
             }
         }
+
+
 
     override fun onDestroy() {
             super.onDestroy()
@@ -168,6 +171,33 @@ class RecordActivity : ComponentActivity() {
             private const val REQUEST_RECORD_AUDIO_PERMISSION = 200
     }
 
+    private fun getRecordingId() {
+        val client = OkHttpClient()
+        val request = Request.Builder()
+            .url("${AppConfig.serverIP}/start_point_recording?record_id=$recordId")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                e.printStackTrace()
+                // Handle the failure case
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val responseBody = response.body?.string()
+                if (response.isSuccessful) {
+                    val jsonObject = JSONObject(responseBody)
+                    val pointRecordId = jsonObject.getString("pointRecordId")
+                    recordingId = pointRecordId
+                    // Use the recordingId for further operations
+                } else {
+                    val errorMessage = JSONObject(responseBody).getString("error")
+                    // Handle the error case
+                    println("Error: $errorMessage")
+                }
+            }
+        })
+    }
     private fun sendAudioDataToServer(audioData: ByteArray) {
 
         val requestBody = MultipartBody.Builder()
@@ -176,6 +206,7 @@ class RecordActivity : ComponentActivity() {
                 audioData.toRequestBody("audio/3gp".toMediaTypeOrNull(), 0, audioData.size))
             .addFormDataPart("button_number", buttonNumber)
             .addFormDataPart("record_id", recordId)
+            .addFormDataPart("pointRecordId", recordingId)
             .build()
 
         val request = Request.Builder()
@@ -196,11 +227,11 @@ class RecordActivity : ComponentActivity() {
                     activeRequests.decrementAndGet()
                     if (!it.isSuccessful) {
                         Log.e("RecordActivity", "Server error: ${response.message}")
-                        // Handle server error, e.g., update UI to show error message
+
                     } else {
                         // Parse the JSON response
                         val responseBody = it.body?.string()
-                        // Assuming the server response includes a JSON object with a "message" field
+
                         val message = JSONObject(responseBody).getString("message")
                         if (message == "Record sucsessfull" && isRecording) {
                             recording_result = "success"
@@ -219,7 +250,7 @@ class RecordActivity : ComponentActivity() {
         val client = OkHttpClient()
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
-            .addFormDataPart("button_number", buttonNumber)
+            .addFormDataPart("button_number", result)
             .addFormDataPart("record_id", recordId)
             .build()
 
@@ -227,13 +258,6 @@ class RecordActivity : ComponentActivity() {
             .url("${AppConfig.serverIP}/save_record")
             .post(requestBody)
             .build()
-
-//        client.newCall(request).execute().use { response ->
-//            if (response.isSuccessful) {
-//                Log.e("MainActivity", "Server success: ${response.message}")
-//                response.body?.string()
-//            } else null
-//        }
 
         client.newCall(request).execute().use { response ->
             if (response.isSuccessful) {
@@ -246,15 +270,13 @@ class RecordActivity : ComponentActivity() {
     private fun stopRecording() {
         isRecording = false // This will cause the loop in startRecording() to end
 
-        when (recording_result) {
-            "success" -> {
+        if (recording_result == "success") {
+
                 result = buttonNumber // or any logic you have for successful recording
-            }
-            "timeout" -> {
+            } else {
                 result = "0"
             }
-            // Optionally handle other conditions
-        }
+        sendSaveCommandToServer(result)
     }
 
 

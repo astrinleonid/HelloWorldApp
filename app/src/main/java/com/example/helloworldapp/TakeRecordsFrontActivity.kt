@@ -15,6 +15,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -128,12 +129,20 @@ class TakeRecordsFrontActivity : ComponentActivity() {
                         .fillMaxSize()
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.front_background),
+                        painter = painterResource(id = R.drawable.breast_background),
                         contentDescription = "Background Image",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
-                    ChangeSideToBackButton(context = context, getResult = getResult, uniqueId = uniqueId)
+                    val intent = Intent(context, TakeRecordsActivity::class.java).apply {
+                        putExtra("UNIQUE_ID", uniqueId)
+                    }
+                    ChangeSideButton(intent = intent,
+                        context = context,
+                        getResult = getResult,
+                        uniqueId = uniqueId,
+                        iconResId = R.drawable.back_icon)
+
                     ButtonGridFront(
                         context = context,
                         buttonColors = buttonColors,
@@ -141,17 +150,26 @@ class TakeRecordsFrontActivity : ComponentActivity() {
                         uniqueId = uniqueId,
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = 50.dp)
+                            .padding(top = 12.dp)
                     )
 
                     if (showDialog.value) {
                         ConfirmationDialog(
-                            onConfirm = {
+                            onSaveAndExit = {
                                 showDialog.value = false
-                                context.startActivity(Intent(context, MainActivity::class.java))
+                                val intent = Intent(context, ShowQrActivity::class.java).apply {
+                                    putExtra("UNIQUE_ID", uniqueId)
+                                }
+                                context.startActivity(intent)
+                                finish()
                             },
-                            onDismiss = { showDialog.value = false }
+                            onDismiss = { showDialog.value = false },
+                            onExitWithoutSaving = { showDialog.value = false
+                                sendDeleteCommand(uniqueId, context)
+                                context.startActivity(Intent(context, MainActivity::class.java))
+                                finish()}
                         )
+
                     }
                 }
             }
@@ -194,30 +212,3 @@ fun ButtonRowFront(buttonLabels: List<Int>, buttonColors: List<Boolean>, getResu
         }
     }
 }
-
-@Composable
-fun ChangeSideToBackButton(context: Context, getResult: ActivityResultLauncher<Intent>, uniqueId: String?) {
-    Spacer(modifier = Modifier
-        .width(240.dp)
-        .height(180.dp))
-
-    Button(
-        onClick = {
-            // Intent to start the playback activity
-            val intent = Intent(context, TakeRecordsActivity::class.java).apply {
-                putExtra("UNIQUE_ID", uniqueId)
-            }
-            context.startActivity(intent)
-        },
-        modifier = Modifier
-            .height(180.dp)  // Sets the height of the button
-            .width(160.dp)
-            .padding(32.dp) ,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(2.dp, Color.Black),  // Black border
-        colors = ButtonDefaults.buttonColors(containerColor = Color.White)  // White background
-    ) {
-        Text(text = "СПИНА", color = Color.Black)
-    }
-}
-

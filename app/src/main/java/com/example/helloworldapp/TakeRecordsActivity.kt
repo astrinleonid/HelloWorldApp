@@ -16,7 +16,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,6 +31,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -45,6 +48,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.helloworldapp.ui.theme.HelloWorldAppTheme
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
 
 class TakeRecordsActivity : ComponentActivity() {
 
@@ -87,9 +96,10 @@ class TakeRecordsActivity : ComponentActivity() {
         val context = LocalContext.current
 
         if (buttonColors.all { it }) {
-            showCenteredToast(context, "ЗАПИСЬ СОХРАНЕНА")
-            context.startActivity(Intent(context, MainActivity::class.java))
-        } else {
+//            showCenteredToast(context, "ЗАПИСЬ СОХРАНЕНА")
+//            context.startActivity(Intent(context, MainActivity::class.java))
+            showDialog.value = true
+        }
             Scaffold(
                 topBar = {
                     TopAppBar(
@@ -116,7 +126,14 @@ class TakeRecordsActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
-                    ChangeSideButton(context = context, getResult = getResult, uniqueId = uniqueId)
+                    val intent = Intent(context, TakeRecordsFrontActivity::class.java).apply {
+                        putExtra("UNIQUE_ID", uniqueId)
+                    }
+                    ChangeSideButton(intent = intent,
+                                    context = context,
+                                    getResult = getResult,
+                                    uniqueId = uniqueId,
+                                    iconResId = R.drawable.breast_icon)
                     ButtonGrid(
                         context = context,
                         buttonColors = buttonColors,
@@ -129,15 +146,25 @@ class TakeRecordsActivity : ComponentActivity() {
 
                     if (showDialog.value) {
                         ConfirmationDialog(
-                            onConfirm = {
+                            onSaveAndExit = {
                                 showDialog.value = false
-                                context.startActivity(Intent(context, MainActivity::class.java))
+                                val intent = Intent(context, ShowQrActivity::class.java).apply {
+                                    putExtra("UNIQUE_ID", uniqueId)
+                                }
+                                context.startActivity(intent)
+                                finish()
                             },
-                            onDismiss = { showDialog.value = false }
+                            onDismiss = { showDialog.value = false },
+                            onExitWithoutSaving = {
+                                showDialog.value = false
+                                sendDeleteCommand(uniqueId, context)
+                                context.startActivity(Intent(context, MainActivity::class.java))
+                                finish()}
+
                         )
                     }
                 }
-            }
+
         }
     }
 }
@@ -207,26 +234,66 @@ fun RoundButton(label: String, isSelected: Boolean, getResult: ActivityResultLau
     }
 }
 
+fun sendDeleteCommand(uniqueId: String?, context: Context) {
+    val url = "${AppConfig.serverIP}/record_delete?record_id=${uniqueId}"
+
+    val request = Request.Builder()
+        .url(url)
+        .get() // Using GET as specified
+        .build()
+
+    OkHttpClient().newCall(request).enqueue(object : okhttp3.Callback {
+        override fun onFailure(call: okhttp3.Call, e: IOException) {
+            // Handle failure, e.g., update UI on main thread
+            (context as? Activity)?.runOnUiThread {
+                Toast.makeText(context,"Error deleting record", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+            (context as? Activity)?.runOnUiThread {
+                if (response.isSuccessful) {
+                    Toast.makeText(context,"Record deleted successfully", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context,"Failed to delete record: ${response.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    })
+}
 
 
 @Composable
-fun ConfirmationDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+fun ConfirmationDialog(
+    onSaveAndExit: () -> Unit,
+    onExitWithoutSaving: () -> Unit,
+    onDismiss: () -> Unit
+) {
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text("Подтвердить")
-        },
+        onDismissRequest = { onDismiss() },
+        title = { Text("Подтвердить") },
         text = {
-            Text("Вы уверены, что хотите закончить запись?")
+            Column {
+                Text("Сохранить записи на сервере и выйти?")
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Button(onClick = onSaveAndExit) {
+                        Text("Сохранить и выйти")
+                    }
+                }
+            }
         },
         confirmButton = {
-            Button(onClick = onConfirm) {
-                Text("Yes")
+            Button(onClick = onExitWithoutSaving) {
+                Text("Не сохранять")
             }
         },
         dismissButton = {
             Button(onClick = onDismiss) {
-                Text("No")
+                Text("Отмена")
             }
         }
     )
@@ -266,24 +333,33 @@ fun PlaybackButton(context: Context, getResult: ActivityResultLauncher<Intent>, 
 }
 
 @Composable
-fun ChangeSideButton(context: Context, getResult: ActivityResultLauncher<Intent>, uniqueId: String?) {
+fun ChangeSideButton(
+    intent: Intent,
+    context: Context,
+    getResult: ActivityResultLauncher<Intent>,
+    uniqueId: String?,
+    iconResId: Int
+) {
+    val icon = painterResource(id = iconResId)
+
     Button(
         onClick = {
-            // Intent to start the playback activity
-            val intent = Intent(context, TakeRecordsFrontActivity::class.java).apply {
-                putExtra("UNIQUE_ID", uniqueId)
-            }
             context.startActivity(intent)
         },
         modifier = Modifier
-            .height(180.dp)  // Sets the height of the button
-            .width(160.dp)
-            .padding(32.dp) ,
+            .height(160.dp)
+            .width(140.dp)
+            .padding(10.dp),
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(2.dp, Color.Black),  // Black border
-        colors = ButtonDefaults.buttonColors(containerColor = Color.White)  // White background
+        border = BorderStroke(2.dp, Color.Black),
+        colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+        contentPadding = PaddingValues(0.dp) // Add this line
     ) {
-        Text(text = "ГРУДЬ", color = Color.Black)
+        Icon(
+            painter = icon,
+            contentDescription = "Button Icon",
+            tint = Color.Unspecified, // Use Color.Unspecified to prevent tinting
+            modifier = Modifier.size(1203.dp)
+        )
     }
 }
-
