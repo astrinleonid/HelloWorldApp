@@ -52,10 +52,11 @@ class RecordActivity : ComponentActivity() {
     private val sampleRate = 22050 // Sample rate in Hz
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-    private var bufferSize: Int = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+    private var bufferSize: Int =
+        AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
     private var audioRecord: AudioRecord? = null
     private val recordingScope = CoroutineScope(Dispatchers.IO + Job())
-    private var result = "0"
+    //private var result = "0"
     private var recordId = "111111"
     private var buttonNumber = "0"
     private var isRecording = false
@@ -68,12 +69,20 @@ class RecordActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // Request permissions if they have not been granted yet
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_RECORD_AUDIO_PERMISSION)
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                REQUEST_RECORD_AUDIO_PERMISSION
+            )
         } else {
             // Permissions already granted, start recording
             buttonNumber = intent.getStringExtra("button_number") ?: "0"
-            recordId = intent.getStringExtra("record_ID") ?: "111111"
+            recordId = intent.getStringExtra("UNIQUE_ID") ?: "000000"
             startRecording()
         }
 
@@ -86,14 +95,18 @@ class RecordActivity : ComponentActivity() {
                     // Extract the button number within onCreate
                     buttonNumber = intent.getStringExtra("button_number") ?: "0"
                     recordId = intent.getStringExtra("UNIQUE_ID") ?: "111111"
-                    result = buttonNumber
+                    //result = buttonNumber
                     RecordingScreen(buttonNumber = buttonNumber)
                 }
             }
         }
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_RECORD_AUDIO_PERMISSION) {
             if ((grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
@@ -109,66 +122,69 @@ class RecordActivity : ComponentActivity() {
     private fun startRecording() {
 
 
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                return
-            }
-            getRecordingId()
-            audioRecord = AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, channelConfig, audioFormat, bufferSize)
-            audioRecord?.startRecording()
-            isRecording = true
-
-            recordingScope.launch {
-                var chunk_index = 0
-                while (isRecording) {
-                    val oneSecondData = ByteArrayOutputStream()
-                    val audioData = ByteArray(bufferSize)
-                    val startTime = System.currentTimeMillis()
-                    while (System.currentTimeMillis() - startTime < AppConfig.segmentLength) { // Capture chunks for roughly 1000 milliseconds
-                        val readResult = audioRecord?.read(audioData, 0, audioData.size)
-                            ?: AudioRecord.ERROR_INVALID_OPERATION
-                        if (readResult > 0) {
-                            oneSecondData.write(audioData, 0, readResult)
-                        }
-                    }
-                    // After collecting 1 second of audio, convert it to wav
-                    val wavData = WavConverter.pcmToWav(oneSecondData.toByteArray(), sampleRate, 1, 16)
-                    oneSecondData.close()
-
-                    sendAudioDataToServer(wavData)
-
-                    oneSecondData.close()
-                    chunk_index += 1
-                    if (chunk_index > AppConfig.timeOut) {
-                        recording_result = "timeout"
-                        stopRecording()
-                    }
-                }
-                val startTime = System.currentTimeMillis()
-                while (System.currentTimeMillis() - startTime < 2000 && activeRequests.get() > 0) {
-
-                }
-
-                sendSaveCommandToServer(result)
-                playSound(recording_result)
-
-                audioRecord?.stop()
-                audioRecord?.release()
-
-                sendResult()
-                finish()
-            }
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
         }
 
+        audioRecord = AudioRecord(
+            MediaRecorder.AudioSource.MIC,
+            sampleRate,
+            channelConfig,
+            audioFormat,
+            bufferSize
+        )
+        audioRecord?.startRecording()
+        isRecording = true
+
+        recordingScope.launch {
+            getRecordingId()
+            var chunk_index = 0
+            while (isRecording) {
+                val oneSecondData = ByteArrayOutputStream()
+                val audioData = ByteArray(bufferSize)
+                val startTime = System.currentTimeMillis()
+                while (System.currentTimeMillis() - startTime < AppConfig.segmentLength) { // Capture chunks for roughly 1000 milliseconds
+                    val readResult = audioRecord?.read(audioData, 0, audioData.size)
+                        ?: AudioRecord.ERROR_INVALID_OPERATION
+                    if (readResult > 0) {
+                        oneSecondData.write(audioData, 0, readResult)
+                    }
+                }
+                // After collecting 1 second of audio, convert it to wav
+                val wavData = WavConverter.pcmToWav(oneSecondData.toByteArray(), sampleRate, 1, 16)
+                oneSecondData.close()
+
+                sendAudioDataToServer(wavData)
+
+                oneSecondData.close()
+                chunk_index += 1
+                if (chunk_index > AppConfig.timeOut) {
+                    recording_result = "timeout"
+                    stopRecording(recording_result, buttonNumber)
+                }
+            }
+
+            playSound(recording_result)
+            audioRecord?.stop()
+            audioRecord?.release()
+            sendResult(recording_result, buttonNumber)
+            finish()
+        }
+    }
 
 
     override fun onDestroy() {
-            super.onDestroy()
-            recordingScope.cancel() // Cancel coroutine when Activity is destroyed
-            audioRecord?.release() // Ensure AudioRecord is released
+        super.onDestroy()
+        recordingScope.cancel() // Cancel coroutine when Activity is destroyed
+        audioRecord?.release() // Ensure AudioRecord is released
     }
 
     companion object {
-            private const val REQUEST_RECORD_AUDIO_PERMISSION = 200
+        private const val REQUEST_RECORD_AUDIO_PERMISSION = 200
     }
 
     private fun getRecordingId() {
@@ -198,12 +214,15 @@ class RecordActivity : ComponentActivity() {
             }
         })
     }
+
     private fun sendAudioDataToServer(audioData: ByteArray) {
 
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
-            .addFormDataPart("file", "audio_record.3gp",
-                audioData.toRequestBody("audio/3gp".toMediaTypeOrNull(), 0, audioData.size))
+            .addFormDataPart(
+                "file", "audio_record.3gp",
+                audioData.toRequestBody("audio/3gp".toMediaTypeOrNull(), 0, audioData.size)
+            )
             .addFormDataPart("button_number", buttonNumber)
             .addFormDataPart("record_id", recordId)
             .addFormDataPart("pointRecordId", recordingId)
@@ -227,7 +246,7 @@ class RecordActivity : ComponentActivity() {
                     activeRequests.decrementAndGet()
                     if (!it.isSuccessful) {
                         Log.e("RecordActivity", "Server error: ${response.message}")
-
+                        println("Request /upload is unsuccessfull, ${response.message}, code ${response.code}")
                     } else {
                         // Parse the JSON response
                         val responseBody = it.body?.string()
@@ -235,7 +254,8 @@ class RecordActivity : ComponentActivity() {
                         val message = JSONObject(responseBody).getString("message")
                         if (message == "Record sucsessfull" && isRecording) {
                             recording_result = "success"
-                            stopRecording()
+                            //result = buttonNumber
+                            stopRecording(recording_result, buttonNumber)
                         } else {
                         }
                     }
@@ -267,19 +287,17 @@ class RecordActivity : ComponentActivity() {
         }
 
     }
-    private fun stopRecording() {
+
+    private fun stopRecording(recording_result: String, buttonNumber: String) {
+        var result_to_send = "0"
         isRecording = false // This will cause the loop in startRecording() to end
 
         if (recording_result == "success") {
-
-                result = buttonNumber // or any logic you have for successful recording
-            } else {
-                result = "0"
-            }
-        sendSaveCommandToServer(result)
+            result_to_send = buttonNumber // or any logic you have for successful recording
+        }
+        sendSaveCommandToServer(result_to_send)
     }
-
-
+    
     private fun playSound(recording_result: String) {
         // Declare mediaPlayer variable outside of the if/else scope
         val mediaPlayer: MediaPlayer = if (recording_result == "success") {
@@ -288,23 +306,24 @@ class RecordActivity : ComponentActivity() {
             MediaPlayer.create(this, R.raw.beep) // Timeout or other failure sound
         }
 
-        mediaPlayer.setOnCompletionListener { mp -> mp.release()}
+        mediaPlayer.setOnCompletionListener { mp -> mp.release() }
         mediaPlayer.start()
     }
-    private fun sendResult() {
-        val data = Intent().apply {
-            putExtra("button_number", result)
-        }
-        setResult(RESULT_OK, data)
-    }
 
-    override fun onBackPressed() {
-        // If the user presses back, return "0"
-        recording_result = "return"
-        stopRecording()
-//        super.onBackPressed()
+    private fun sendResult(recording_result: String, buttonNumber: String) {
+        var result_to_return = "0"
+        var result_code = RESULT_CANCELED
+        if (recording_result == "sucsess") {
+            result_to_return = buttonNumber
+            result_code = RESULT_OK
+        }
+        val data = Intent().apply {
+            putExtra("button_number", result_to_return)
+        }
+        setResult(result_code, data)
     }
 }
+
 
 @Composable
 fun RecordingScreen(buttonNumber: String) {
@@ -321,6 +340,21 @@ fun RecordingScreen(buttonNumber: String) {
             // Include a button or another UI element if needed
         }
     }
+//    Button(
+//        onClick = {
+//            stopRecording()
+//        },
+//        modifier = Modifier
+//            .fillMaxWidth()
+//            .padding(16.dp)
+//            .align(Alignment.BottomCenter),
+//        colors = ButtonDefaults.buttonColors(
+//            backgroundColor = Color.Red,
+//            contentColor = Color.White
+//        )
+//    ) {
+//        Text(text = "STOP")
+//    }
 }
 
 object WavConverter {
