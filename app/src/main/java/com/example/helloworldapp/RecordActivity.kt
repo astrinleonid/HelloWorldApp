@@ -362,53 +362,10 @@ fun RecordingScreen(buttonNumber: String, stopRecordingCallback: (String, String
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
-            Text(text = "STOP", color = MaterialTheme.colorScheme.onPrimary)
+            Text(text = "ОТМЕНА", color = MaterialTheme.colorScheme.onPrimary)
         }
     }
 }
-
-//
-//
-//@Composable
-//fun RecordingScreen(buttonNumber: String, stopRecordingCallback: (String, String) -> Unit) {
-//    Box(
-//        modifier = Modifier.fillMaxSize()
-//    ) {
-//        Column(
-//            modifier = Modifier
-//                .fillMaxSize()
-//                .padding(16.dp),
-//            verticalArrangement = Arrangement.SpaceBetween, // This will push the button to the bottom
-//            horizontalAlignment = Alignment.CenterHorizontally
-//        ) {
-//            Column(
-//                horizontalAlignment = Alignment.CenterHorizontally
-//            ) {
-//                Image(
-//                    painter = painterResource(R.drawable.recording_image),
-//                    contentDescription = "Recording in progress",
-//                    modifier = Modifier
-//                            .size(200.dp)
-//                )
-//                Text(text = "Recording...", modifier = Modifier.padding(top = 16.dp))
-//            }
-//
-//            // Stop Button at the bottom
-//            Button(
-//                onClick = {
-//                    stopRecordingCallback("abort", "0")
-//                },
-//                modifier = Modifier
-//                    .fillMaxWidth() // Ensure the button stretches across the width
-//                    .padding(8.dp),
-//                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-//            ) {
-//                Text(text = "STOP", color = MaterialTheme.colorScheme.onPrimary)
-//            }
-//        }
-//    }
-//}
-
 
 object WavConverter {
     fun pcmToWav(pcmData: ByteArray, sampleRate: Int, channels: Int, bitDepth: Int): ByteArray {

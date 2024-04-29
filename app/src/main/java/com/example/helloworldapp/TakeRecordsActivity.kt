@@ -34,8 +34,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,35 +50,69 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.helloworldapp.ui.theme.HelloWorldAppTheme
+import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import okhttp3.Callback
+import org.json.JSONArray
 import java.io.IOException
 
 class TakeRecordsActivity : ComponentActivity() {
 
-    private val buttonColors = mutableStateListOf<Boolean>().apply { addAll(List(6) { false }) }
+    private val buttonColors = mutableStateListOf<Boolean>().apply { addAll(List(10) { false }) }
     private val showDialog = mutableStateOf(false)
     private val getResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val data = result.data
             val buttonNumber = data?.getStringExtra("button_number")?.toIntOrNull()
             buttonNumber?.let {
-                if (it in 5..buttonColors.size + 4) {
-                    buttonColors[it - 5] = true // Update the color state for the button
+                if (it in 5..buttonColors.size) {
+                    buttonColors[it -1] = true // Update the color state for the button
                 }
+            }
+        }
+        val uniqueId = intent.getStringExtra("UNIQUE_ID")
+        fetchButtonColors(uniqueId) { buttonStates ->
+            buttonStates?.let {
+                runOnUiThread {
+                    buttonColors.clear()
+                    buttonColors.addAll(it)
+                }
+            } ?: run {
+                println("Failed to fetch or parse button states.")
             }
         }
     }
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val uniqueId = intent.getStringExtra("UNIQUE_ID")
+        fetchButtonColors(uniqueId) { buttonStates ->
+            buttonStates?.let {
+                // Update your state here
+                runOnUiThread {
+                    // Assuming buttonColors is a mutableStateListOf<Boolean>
+                    buttonColors.clear()
+                    buttonColors.addAll(it)
+                }
+            } ?: run {
+                // Handle error or null state
+                println("Failed to fetch or parse button states.")
+            }
+        }
         setContent {
             HelloWorldAppTheme {
-                MainContent(uniqueId, buttonColors, getResult)
+                Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = Color.White
+                ){
+                    MainContent(uniqueId, buttonColors, getResult)
+                }
             }
         }
     }
@@ -96,14 +132,17 @@ class TakeRecordsActivity : ComponentActivity() {
         val context = LocalContext.current
 
         if (buttonColors.all { it }) {
-//            showCenteredToast(context, "ЗАПИСЬ СОХРАНЕНА")
-//            context.startActivity(Intent(context, MainActivity::class.java))
             showDialog.value = true
         }
             Scaffold(
+                containerColor = Color.White,
                 topBar = {
                     TopAppBar(
                         title = { Text("Запись точек на спине") },
+                        colors = TopAppBarDefaults.smallTopAppBarColors(
+                            containerColor = Color.White,  // Set the background color of the TopAppBar
+                            titleContentColor = Color.Black  // Set the color of the title text
+                        ),
                         actions = {
                             PlaybackButton(context = context, getResult = getResult, uniqueId = uniqueId)
                         }
@@ -204,7 +243,7 @@ fun ButtonRow(buttonLabels: List<Int>, buttonColors: List<Boolean>, getResult: A
             .padding(vertical = 8.dp)
     ) {
         buttonLabels.forEach {label ->
-            val isSelected = buttonColors[label - 5]
+            val isSelected = buttonColors[label - 1]
             RoundButton(label = "$label", isSelected = isSelected, getResult = getResult, context = context, uniqueId = uniqueId)
         }
     }
@@ -320,7 +359,7 @@ fun PlaybackButton(context: Context, getResult: ActivityResultLauncher<Intent>, 
             val intent = Intent(context, PlayRecordsActivity::class.java).apply {
                 putExtra("UNIQUE_ID", uniqueId)
             }
-            context.startActivity(intent)
+            getResult.launch(intent)
         },
         modifier = Modifier
             .height(32.dp)  // Sets the height of the button
@@ -363,3 +402,36 @@ fun ChangeSideButton(
         )
     }
 }
+
+fun fetchButtonColors(recordId: String?, callback: (List<Boolean>?) -> Unit) {
+    val client = OkHttpClient()
+    val request = Request.Builder()
+        .url("${AppConfig.serverIP}/get_button_states?record_id=$recordId")
+        .build()
+
+    client.newCall(request).enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            e.printStackTrace()
+            callback(null) // Pass null or an empty list to indicate failure
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            response.use { res ->
+                if (res.isSuccessful) {
+                    val jsonData = res.body?.string()
+                    val jsonArray = JSONArray(jsonData)
+                    val buttonColors = mutableListOf<Boolean>()
+                    for (i in 0 until jsonArray.length()) {
+                        buttonColors.add(jsonArray.getBoolean(i))
+                    }
+                    callback(buttonColors)
+                } else {
+                    callback(null) // Handle the error, e.g., show error message
+                }
+            }
+        }
+    })
+}
+
+// Usage example within an activity or another composable scope:
+

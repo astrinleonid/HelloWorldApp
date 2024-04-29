@@ -3,6 +3,7 @@ package com.example.helloworldapp
 import AppConfig
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.media.MediaPlayer
 import android.os.Bundle
 import android.util.Log
@@ -128,6 +129,7 @@ class PlayRecordsActivity : AppCompatActivity() {
     private lateinit var listView: ListView
     private lateinit var textViewStatus: TextView
     private var folderId = ""
+    val returnIntent = Intent()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -189,5 +191,8 @@ class PlayRecordsActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         mediaPlayer?.release()
+        returnIntent.putExtra("button_number", 0)
+        setResult(Activity.RESULT_OK, returnIntent)
+        finish()
     }
 }

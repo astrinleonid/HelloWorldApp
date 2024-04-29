@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +30,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,11 +80,13 @@ class MainActivity : ComponentActivity() {
 fun MyApp() {
     val context = LocalContext.current
     Scaffold(
-        topBar = { TopBar() }
+        topBar = { TopBar() },
+        containerColor = Color.White // Directly setting the color to white
     ) { padding ->
-       Greeting("Android", context = context, modifier = Modifier.padding(padding))
+        Greeting("Android", context = context, modifier = Modifier.padding(padding))
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,7 +95,11 @@ fun TopBar() {
     val context = LocalContext.current
 
     TopAppBar(
-        title = { Text("beta app, server IP ${AppConfig.serverIP}") },
+        title = { Text("beta app, server IP ${AppConfig.serverIP}")},
+        colors = TopAppBarDefaults.smallTopAppBarColors(
+            containerColor = Color.White,  // Set the background color of the TopAppBar
+            titleContentColor = Color.Black  // Set the color of the title text
+        ),
         actions = {
             IconButton(onClick = { showSettingsDialog = true }) {
                 Icon(Icons.Filled.Settings, contentDescription = "Settings")
@@ -106,13 +114,13 @@ fun TopBar() {
 
 @Composable
 fun SettingsDialog(context: Context, onDismiss: () -> Unit) {
-    var ipText by remember { mutableStateOf("74.208.75.175") }
-    var portText by remember { mutableStateOf("5000") }
-    var timeoutText by remember { mutableStateOf("10") }
-    var numChunksText by remember { mutableStateOf("3") }
-    var chunkLengthText by remember { mutableStateOf("1361") }
+    var ipText by remember { mutableStateOf(AppConfig.serverIP) }
+//    var portText by remember { mutableStateOf(AppConfig.port.toString()) }
+    var timeoutText by remember { mutableStateOf(AppConfig.timeOut.toString()) }
+    var numChunksText by remember { mutableStateOf(AppConfig.numChunks.toString()) }
+    var chunkLengthText by remember { mutableStateOf(AppConfig.segmentLength.toString()) }
 
-    var protocolChecked by remember { mutableStateOf(false) } // False for HTTP, true for HTTPS
+    var protocolChecked by remember { mutableStateOf(AppConfig.serverIP.startsWith("https")) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -124,14 +132,14 @@ fun SettingsDialog(context: Context, onDismiss: () -> Unit) {
                     onValueChange = { ipText = it },
                     label = { Text("Server IP Address") }
                 )
-                TextField(
-                    value = portText,
-                    onValueChange = { portText = it },
-                    label = { Text("Port") },
-                    keyboardOptions = KeyboardOptions.Default.copy(
-                            keyboardType = KeyboardType.Number
-                            )
-                )
+//                TextField(
+//                    value = portText,
+//                    onValueChange = { portText = it },
+//                    label = { Text("Port") },
+//                    keyboardOptions = KeyboardOptions.Default.copy(
+//                            keyboardType = KeyboardType.Number
+//                            )
+//                )
                 TextField(
                     value = timeoutText,
                     onValueChange = { timeoutText = it },
@@ -171,7 +179,7 @@ fun SettingsDialog(context: Context, onDismiss: () -> Unit) {
         confirmButton = {
             Button(onClick = {
                 val protocol = if (protocolChecked) "https" else "http"
-                AppConfig.serverIP = "$protocol://$ipText:$portText"
+                AppConfig.serverIP = "$ipText" //:$portText"
                 val timeout = timeoutText.toIntOrNull() ?: 10 // Default to 30 seconds if invalid or empty
                 AppConfig.timeOut = timeout
                 val numChunks = numChunksText.toIntOrNull() ?: 10 // Default to 30 seconds if invalid or empty
@@ -203,20 +211,21 @@ fun Greeting(name: String, context: Context? = null, modifier: Modifier = Modifi
 
 
         // Column composable to stack items vertically
-        Column(
-            modifier = modifier.fillMaxSize(), // Fill the parent's size
-//            verticalArrangement = Arrangement.SpaceBetween, // Space out the children as much as possible
-            horizontalAlignment = Alignment.CenterHorizontally // Center items horizontally
-        ) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.White) // Explicitly setting the background color here too
+            ) {
             Text(
                 text = "ТЕПРО",
-//                style = TextStyle(fontSize = 32.sp), // Set font size to 16sp
+//              style = TextStyle(fontSize = 32.sp), // Set font size to 16sp
+                color = Color.Black,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 32.dp) // Top padding for aesthetic spacing
             )
             Text(
                 text = "Карманный стетоскоп",
-//                style = TextStyle(fontSize = 20.sp), // Set font size to 16sp
+                color = Color.Black,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 2.dp, bottom = 24.dp) // Top padding for aesthetic spacing
             )
@@ -225,7 +234,7 @@ fun Greeting(name: String, context: Context? = null, modifier: Modifier = Modifi
             Text(
                 text = "Нажми на фиолетовый круг и прижми телефон микрофоном к соответствующей области на теле. Удерживай телефон плотно прижав его к телу и не шевеля, пока не услышишь короткий двойной сигнал. Длинный сигнал означает, что запись не удалась, повтори процедуру",
                 textAlign = TextAlign.Center,
-//                style = TextStyle(fontSize = 24.sp), // Set font size to 16sp
+                color = Color.Black,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp)
 //                modifier = Modifier.padding(top = 32.dp) // Top padding for aesthetic spacing
             )
@@ -250,7 +259,7 @@ fun Greeting(name: String, context: Context? = null, modifier: Modifier = Modifi
                         }
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
+                colors = ButtonDefaults.buttonColors(),
                 modifier = Modifier
                     .padding(16.dp)
                     .align(Alignment.CenterHorizontally)
