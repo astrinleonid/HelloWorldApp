@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
@@ -96,7 +97,7 @@ class RecordActivity : ComponentActivity() {
             HelloWorldAppTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = Color.White
                 ) {
                     // Extract the button number within onCreate
                     buttonNumber = intent.getStringExtra("button_number") ?: "0"
@@ -177,6 +178,7 @@ class RecordActivity : ComponentActivity() {
             }
 
             playSound(recording_result)
+            sendSaveCommandToServer(recording_result, buttonNumber)
             audioRecord?.stop()
             audioRecord?.release()
             sendResult(recording_result, buttonNumber)
@@ -273,12 +275,13 @@ class RecordActivity : ComponentActivity() {
         })
     }
 
-    private fun sendSaveCommandToServer(result: String) {
+    private fun sendSaveCommandToServer(result: String, buttonNumber: String) {
 
         val client = OkHttpClient()
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
-            .addFormDataPart("button_number", result)
+            .addFormDataPart("result", result)
+            .addFormDataPart("button_number", buttonNumber)
             .addFormDataPart("record_id", recordId)
             .build()
 
@@ -296,14 +299,10 @@ class RecordActivity : ComponentActivity() {
 
     }
 
-    private fun stopRecording(recording_result: String, buttonNumber: String) {
-        var result_to_send = "0"
+    private fun stopRecording(result: String, buttonNumber: String) {
+        recording_result = result
         isRecording = false // This will cause the loop in startRecording() to end
 
-        if (recording_result == "success") {
-            result_to_send = buttonNumber // or any logic you have for successful recording
-        }
-        sendSaveCommandToServer(result_to_send)
     }
 
     private fun playSound(recording_result: String) {
@@ -337,81 +336,79 @@ class RecordActivity : ComponentActivity() {
 @Composable
 fun RecordingScreen(buttonNumber: String, stopRecordingCallback: (String, String) -> Unit) {
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center // Centers the content inside the box
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween, // This will push the button to the bottom
+            verticalArrangement = Arrangement.Center, // Centers the column content vertically
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.recording_image),
-                    contentDescription = "Recording in progress",
-                    modifier = Modifier
-                            .size(200.dp)
-                )
-                Text(text = "Recording...", modifier = Modifier.padding(top = 16.dp))
-            }
+            Image(
+                painter = painterResource(R.drawable.recording_image),
+                contentDescription = "Recording in progress",
+                modifier = Modifier.size(200.dp)
+            )
+            Text(text = "Recording...", modifier = Modifier.padding(top = 16.dp))
+        }
 
-            // Stop Button at the bottom
-            Button(
-                onClick = {
-                    stopRecordingCallback("return", "0")
-                },
-                modifier = Modifier
-                    .fillMaxWidth() // Ensure the button stretches across the width
-                    .padding(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-            ) {
-                Text(text = "STOP", color = MaterialTheme.colorScheme.onPrimary)
-            }
+        Button(
+            onClick = { stopRecordingCallback("abort", "0") },
+            modifier = Modifier
+                .align(Alignment.BottomCenter) // Position the button at the bottom center of the Box
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+        ) {
+            Text(text = "STOP", color = MaterialTheme.colorScheme.onPrimary)
         }
     }
 }
 
-
-
+//
+//
 //@Composable
-//fun RecordingScreen(buttonNumber: String) {
-//    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-//        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-//            Image(
-//                painter = painterResource(R.drawable.recording_image),
-//                contentDescription = "Recording in progress",
+//fun RecordingScreen(buttonNumber: String, stopRecordingCallback: (String, String) -> Unit) {
+//    Box(
+//        modifier = Modifier.fillMaxSize()
+//    ) {
+//        Column(
+//            modifier = Modifier
+//                .fillMaxSize()
+//                .padding(16.dp),
+//            verticalArrangement = Arrangement.SpaceBetween, // This will push the button to the bottom
+//            horizontalAlignment = Alignment.CenterHorizontally
+//        ) {
+//            Column(
+//                horizontalAlignment = Alignment.CenterHorizontally
+//            ) {
+//                Image(
+//                    painter = painterResource(R.drawable.recording_image),
+//                    contentDescription = "Recording in progress",
+//                    modifier = Modifier
+//                            .size(200.dp)
+//                )
+//                Text(text = "Recording...", modifier = Modifier.padding(top = 16.dp))
+//            }
+//
+//            // Stop Button at the bottom
+//            Button(
+//                onClick = {
+//                    stopRecordingCallback("abort", "0")
+//                },
 //                modifier = Modifier
-//                    .size(200.dp) // Adjust the size as needed
-//                    .padding(16.dp)
-//            )
-//            Text(text = "Recording...", modifier = Modifier.padding(16.dp))
-//            // Include a button or another UI element if needed
+//                    .fillMaxWidth() // Ensure the button stretches across the width
+//                    .padding(8.dp),
+//                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+//            ) {
+//                Text(text = "STOP", color = MaterialTheme.colorScheme.onPrimary)
+//            }
 //        }
 //    }
-//    Button(
-//        onClick = {
-//            stopRecording()
-//        },
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .padding(16.dp)
-//            .align(Alignment.BottomCenter),
-//        colors = ButtonDefaults.buttonColors(
-//            backgroundColor = Color.Red,
-//            contentColor = Color.White
-//        )
-//    ) {
-//        Text(text = "STOP")
-//    }
 //}
 
-//@Composable
-//fun Button(onClick: () -> Unit, modifier: Any, colors: ButtonColors, content: @Composable () -> Unit) {
-//    TODO("Not yet implemented")
-//}
 
 object WavConverter {
     fun pcmToWav(pcmData: ByteArray, sampleRate: Int, channels: Int, bitDepth: Int): ByteArray {
