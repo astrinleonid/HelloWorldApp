@@ -15,19 +15,19 @@
         android:textSize="16sp"
         android:paddingEnd="8dp"/>
 
-<!--    <Button-->
-<!--        android:id="@+id/buttonPlay"-->
-<!--        android:layout_width="wrap_content"-->
-<!--        android:layout_height="wrap_content"-->
-<!--        android:text="Play"/>-->
-
     <Button
         android:id="@+id/buttonPlay"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:background="@android:color/white"
-        android:drawableTop="@drawable/ic_action_play"
-        android:contentDescription="Play" />
+        android:text="Play"/>
+
+<!--    <Button-->
+<!--        android:id="@+id/buttonPlay"-->
+<!--        android:layout_width="wrap_content"-->
+<!--        android:layout_height="wrap_content"-->
+<!--        android:background="@android:color/white"-->
+<!--        android:drawableTop="@drawable/ic_action_play"-->
+<!--        android:contentDescription="Play" />-->
 
     <Button
         android:id="@+id/buttonDelete"
