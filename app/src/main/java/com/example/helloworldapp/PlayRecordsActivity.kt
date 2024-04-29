@@ -130,8 +130,10 @@ class PlayRecordsActivity : AppCompatActivity() {
     private lateinit var textViewStatus: TextView
     private var folderId = ""
     val returnIntent = Intent()
+    private lateinit var buttonOK: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
+
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_file_list)
 
@@ -145,6 +147,10 @@ class PlayRecordsActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 setupListView(flieList)
             }
+        }
+        buttonOK =  findViewById<Button>(R.id.buttonOK)
+        buttonOK.setOnClickListener {
+            finish()
         }
     }
 

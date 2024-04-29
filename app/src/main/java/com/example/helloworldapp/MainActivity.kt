@@ -245,7 +245,7 @@ fun Greeting(name: String, context: Context? = null, modifier: Modifier = Modifi
                     checkServerResponse() { isSuccessful ->
                         if (isSuccessful) {
                             CoroutineScope(Dispatchers.IO).launch {
-                                uniqueId = fetchUniqueId()
+                                uniqueId = fetchUniqueId(AppConfig.numChunks)
                                 withContext(Dispatchers.Main) {
                                     uniqueId?.let {
                                         val intent = Intent(context, TakeRecordsFrontActivity::class.java)
@@ -335,7 +335,7 @@ fun checkServerResponse(callback: (Boolean) -> Unit) {
     })
 }
 
-suspend fun fetchUniqueId(): String? = withContext(Dispatchers.IO) {
+suspend fun fetchUniqueId(numChunks : Int): String? = withContext(Dispatchers.IO) {
 
     val client = OkHttpClient()
     val deviceInfo = mapOf(
@@ -348,7 +348,7 @@ suspend fun fetchUniqueId(): String? = withContext(Dispatchers.IO) {
     )
 
     val request = Request.Builder()
-        .url("${AppConfig.serverIP}/getUniqueId")
+        .url("${AppConfig.serverIP}/getUniqueId?numChunks=${AppConfig.numChunks}")
         .post(requestBody)
         .build()
 
