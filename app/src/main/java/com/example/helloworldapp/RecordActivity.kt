@@ -13,11 +13,15 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -64,6 +68,8 @@ class RecordActivity : ComponentActivity() {
     private var recording_result = "fail"
     private var recordingId = "0"
 
+    private var stopRecordingCallback: (String, String) -> Unit = { _, _ -> }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,7 +102,9 @@ class RecordActivity : ComponentActivity() {
                     buttonNumber = intent.getStringExtra("button_number") ?: "0"
                     recordId = intent.getStringExtra("UNIQUE_ID") ?: "111111"
                     //result = buttonNumber
-                    RecordingScreen(buttonNumber = buttonNumber)
+                    RecordingScreen(buttonNumber = buttonNumber, stopRecordingCallback = { result, buttonNum ->
+                        stopRecording(result, buttonNum)
+                    })
                 }
             }
         }
@@ -297,7 +305,7 @@ class RecordActivity : ComponentActivity() {
         }
         sendSaveCommandToServer(result_to_send)
     }
-    
+
     private fun playSound(recording_result: String) {
         // Declare mediaPlayer variable outside of the if/else scope
         val mediaPlayer: MediaPlayer = if (recording_result == "success") {
@@ -313,33 +321,76 @@ class RecordActivity : ComponentActivity() {
     private fun sendResult(recording_result: String, buttonNumber: String) {
         var result_to_return = "0"
         var result_code = RESULT_CANCELED
-        if (recording_result == "sucsess") {
+        if (recording_result == "success") {
             result_to_return = buttonNumber
             result_code = RESULT_OK
         }
         val data = Intent().apply {
             putExtra("button_number", result_to_return)
         }
+
         setResult(result_code, data)
     }
 }
 
 
 @Composable
-fun RecordingScreen(buttonNumber: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Image(
-                painter = painterResource(R.drawable.recording_image),
-                contentDescription = "Recording in progress",
+fun RecordingScreen(buttonNumber: String, stopRecordingCallback: (String, String) -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween, // This will push the button to the bottom
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.recording_image),
+                    contentDescription = "Recording in progress",
+                    modifier = Modifier
+                            .size(200.dp)
+                )
+                Text(text = "Recording...", modifier = Modifier.padding(top = 16.dp))
+            }
+
+            // Stop Button at the bottom
+            Button(
+                onClick = {
+                    stopRecordingCallback("return", "0")
+                },
                 modifier = Modifier
-                    .size(200.dp) // Adjust the size as needed
-                    .padding(16.dp)
-            )
-            Text(text = "Recording...", modifier = Modifier.padding(16.dp))
-            // Include a button or another UI element if needed
+                    .fillMaxWidth() // Ensure the button stretches across the width
+                    .padding(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text(text = "STOP", color = MaterialTheme.colorScheme.onPrimary)
+            }
         }
     }
+}
+
+
+
+//@Composable
+//fun RecordingScreen(buttonNumber: String) {
+//    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+//        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+//            Image(
+//                painter = painterResource(R.drawable.recording_image),
+//                contentDescription = "Recording in progress",
+//                modifier = Modifier
+//                    .size(200.dp) // Adjust the size as needed
+//                    .padding(16.dp)
+//            )
+//            Text(text = "Recording...", modifier = Modifier.padding(16.dp))
+//            // Include a button or another UI element if needed
+//        }
+//    }
 //    Button(
 //        onClick = {
 //            stopRecording()
@@ -355,7 +406,12 @@ fun RecordingScreen(buttonNumber: String) {
 //    ) {
 //        Text(text = "STOP")
 //    }
-}
+//}
+
+//@Composable
+//fun Button(onClick: () -> Unit, modifier: Any, colors: ButtonColors, content: @Composable () -> Unit) {
+//    TODO("Not yet implemented")
+//}
 
 object WavConverter {
     fun pcmToWav(pcmData: ByteArray, sampleRate: Int, channels: Int, bitDepth: Int): ByteArray {
