@@ -16,14 +16,18 @@ import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.Response
 import java.io.IOException
 import java.net.URLEncoder
@@ -35,6 +39,13 @@ class FileListAdapter(private val context: Context,
                       private val onDeleteSuccess: () -> Unit
                       ) : ArrayAdapter<String>(context, 0, fileList) {
     private var mediaPlayer: MediaPlayer? = null
+    private val fileParameters = mutableMapOf<String, String>()  // Store file parameters
+    init {
+        // Initialize all filenames with a default label
+        fileList.forEach { fileName ->
+            fileParameters[fileName] = "No Label"
+        }
+    }
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
         var listItemView = convertView
         if (listItemView == null) {
@@ -45,8 +56,14 @@ class FileListAdapter(private val context: Context,
         val textViewFileName = listItemView?.findViewById<TextView>(R.id.textViewFileName)
         val buttonPlay = listItemView?.findViewById<Button>(R.id.buttonPlay)
         val buttonDelete = listItemView?.findViewById<Button>(R.id.buttonDelete)
+        val buttonLabel = listItemView?.findViewById<Button>(R.id.buttonLabel)
 
         textViewFileName?.text = fileName
+        if (buttonLabel != null) {
+            buttonLabel.text = fileParameters[fileName] ?: "No Label"
+        }
+
+        // buttonLabel?.text = "No Label"
         buttonPlay?.setOnClickListener {
             playFile(folderId, fileName ?: "")
         }
@@ -55,7 +72,54 @@ class FileListAdapter(private val context: Context,
             notifyDataSetChanged()
         }
 
+        buttonLabel?.setOnClickListener {
+            fileName?.let { safeFileName ->
+                val currentLabel = fileParameters[safeFileName] ?: "No Label"
+                val newLabel = when (currentLabel) {
+                    "No Label" -> "Normal"
+                    "Normal" -> "Problems"
+                    else -> "No Label"
+                }
+                fileParameters[safeFileName] = newLabel
+
+                // Update button color based on the new label
+                val colorRes = when (newLabel) {
+                    "Normal" -> R.color.colorNormal
+                    "Problems" -> R.color.colorProblems
+                    else -> R.color.colorNoLabel
+                }
+                buttonLabel.setBackgroundColor(ContextCompat.getColor(context, colorRes))
+                sendFileParametersToServer(fileParameters)
+                notifyDataSetChanged()
+            }
+        }
+
+
         return listItemView!!
+    }
+
+    private fun sendFileParametersToServer(fileParameters: Map<String, String>) {
+        val json = Gson().toJson(fileParameters)
+        val body = RequestBody.create("application/json; charset=utf-8".toMediaTypeOrNull(), json)
+        val request = Request.Builder()
+            .url("${AppConfig.serverIP}/update_labels?folderId=$folderId")
+            .post(body)
+            .build()
+
+        OkHttpClient().newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("FileListAdapter", "Failed to send file parameters", e)
+                // Optionally update UI thread with failure message
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                if (!response.isSuccessful) {
+                    Log.e("FileListAdapter", "Server error: ${response.message}")
+                } else {
+                    Log.i("FileListAdapter", "Parameters updated successfully")
+                }
+            }
+        })
     }
 
     private fun playFile(folderId: String, fileName: String) {
@@ -124,6 +188,7 @@ class FileListAdapter(private val context: Context,
 
 
 
+
 class PlayRecordsActivity : AppCompatActivity() {
     private var mediaPlayer: MediaPlayer? = null
     private lateinit var listView: ListView
@@ -150,6 +215,9 @@ class PlayRecordsActivity : AppCompatActivity() {
         }
         buttonOK =  findViewById<Button>(R.id.buttonOK)
         buttonOK.setOnClickListener {
+            mediaPlayer?.release()
+            returnIntent.putExtra("button_number", 0)
+            setResult(Activity.RESULT_OK, returnIntent)
             finish()
         }
     }

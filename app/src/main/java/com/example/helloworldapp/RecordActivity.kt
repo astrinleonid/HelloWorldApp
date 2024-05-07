@@ -177,10 +177,10 @@ class RecordActivity : ComponentActivity() {
                 }
             }
 
-            playSound(recording_result)
             sendSaveCommandToServer(recording_result, buttonNumber)
             audioRecord?.stop()
             audioRecord?.release()
+            playSound(recording_result)
             sendResult(recording_result, buttonNumber)
             finish()
         }

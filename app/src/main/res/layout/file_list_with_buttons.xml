@@ -17,17 +17,32 @@
             android:textSize="16sp"
             android:paddingEnd="8dp"/>
 
+
+        <Button
+            android:id="@+id/buttonLabel"
+            android:layout_width="100dp"
+            android:layout_height="wrap_content"
+
+            android:padding="4.dp"
+            android:layout_marginEnd="16dp"/>
+
+
         <Button
             android:id="@+id/buttonPlay"
-            android:layout_width="wrap_content"
+            android:layout_width="40dp"
             android:layout_height="wrap_content"
-            android:text="Play"/>
+            android:text=">"
+            android:padding="4.dp"
+            android:layout_marginEnd="4dp"/>
 
         <Button
             android:id="@+id/buttonDelete"
-            android:layout_width="wrap_content"
+            android:layout_width="40dp"
             android:layout_height="wrap_content"
-            android:text="Delete"/>
+            android:text="X"
+            android:padding="4.dp"/>
+
+
 
 
 

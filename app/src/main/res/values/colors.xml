@@ -7,4 +7,8 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <color name="colorNoLabel">#D3D3D3</color> <!-- Example gray for no label -->
+    <color name="colorNormal">#758775</color> <!-- Green for labeled -->
+    <color name="colorProblems">#8E5858</color> <!-- Red for verified -->
 </resources>
