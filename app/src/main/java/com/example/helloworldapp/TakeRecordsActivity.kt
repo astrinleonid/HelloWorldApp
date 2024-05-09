@@ -347,7 +347,7 @@ fun DoneButton(onClick: () -> Unit) {
             .padding(16.dp), // Adjust padding as necessary
         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
     ) {
-        Text("DONE", color = MaterialTheme.colorScheme.onPrimary)
+        Text("ГОТОВО", color = MaterialTheme.colorScheme.onPrimary)
     }
 }
 
