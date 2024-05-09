@@ -18,10 +18,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.google.gson.Gson
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -29,23 +25,21 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.Response
+import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
 
-class FileListAdapter(private val context: Context,
-                      private val fileList: MutableList<String>,
-                      private val folderId: String,
-                      private val textViewStatus: TextView,
-                      private val onDeleteSuccess: () -> Unit
-                      ) : ArrayAdapter<String>(context, 0, fileList) {
+class FileListAdapter(
+    private val context: Context,
+    private val fileList: MutableList<String>,
+    private val folderId: String,
+    private val textViewStatus: TextView,
+    private val fileParameters: MutableMap<String, String>,
+    private val onDeleteSuccess: () -> Unit
+) : ArrayAdapter<String>(context, 0, fileList) {
     private var mediaPlayer: MediaPlayer? = null
-    private val fileParameters = mutableMapOf<String, String>()  // Store file parameters
-    init {
-        // Initialize all filenames with a default label
-        fileList.forEach { fileName ->
-            fileParameters[fileName] = "No Label"
-        }
-    }
+//    private val fileParameters = mutableMapOf<String, String>()  // Store file parameters
+
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
         var listItemView = convertView
         if (listItemView == null) {
@@ -58,9 +52,13 @@ class FileListAdapter(private val context: Context,
         val buttonDelete = listItemView?.findViewById<Button>(R.id.buttonDelete)
         val buttonLabel = listItemView?.findViewById<Button>(R.id.buttonLabel)
 
-        textViewFileName?.text = fileName
+        val pointNumber = fileName?.substringAfterLast("point")?.toIntOrNull() ?: 0
+
+        textViewFileName?.text = "Point $pointNumber"
         if (buttonLabel != null) {
-            buttonLabel.text = fileParameters[fileName] ?: "No Label"
+            val initialLabel = fileParameters[fileName] ?: "No Label"
+            buttonLabel.text = initialLabel
+            setButtonColor(buttonLabel, initialLabel)
         }
 
         // buttonLabel?.text = "No Label"
@@ -93,11 +91,17 @@ class FileListAdapter(private val context: Context,
                 notifyDataSetChanged()
             }
         }
-
-
         return listItemView!!
     }
 
+    private fun setButtonColor(button: Button, label: String) {
+        val colorRes = when (label) {
+            "Normal" -> R.color.colorNormal
+            "Problems" -> R.color.colorProblems
+            else -> R.color.colorNoLabel
+        }
+        button.setBackgroundColor(ContextCompat.getColor(context, colorRes))
+    }
     private fun sendFileParametersToServer(fileParameters: Map<String, String>) {
         val json = Gson().toJson(fileParameters)
         val body = RequestBody.create("application/json; charset=utf-8".toMediaTypeOrNull(), json)
@@ -186,9 +190,6 @@ class FileListAdapter(private val context: Context,
 
 }
 
-
-
-
 class PlayRecordsActivity : AppCompatActivity() {
     private var mediaPlayer: MediaPlayer? = null
     private lateinit var listView: ListView
@@ -196,9 +197,9 @@ class PlayRecordsActivity : AppCompatActivity() {
     private var folderId = ""
     val returnIntent = Intent()
     private lateinit var buttonOK: Button
+    private val fileParameters = mutableMapOf<String, String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_file_list)
 
@@ -206,14 +207,13 @@ class PlayRecordsActivity : AppCompatActivity() {
         textViewStatus = findViewById(R.id.textViewStatus)
         folderId = intent.getStringExtra("UNIQUE_ID") ?: ""
 
-        CoroutineScope(Dispatchers.IO).launch {
-            val filesJson = fetchFileList(folderId)
-            val flieList = filesJson.split(" ").toList()
-            withContext(Dispatchers.Main) {
-                setupListView(flieList)
+        fetchFileList(folderId) { fileList ->
+            runOnUiThread {
+                setupListView(fileList)
             }
         }
-        buttonOK =  findViewById<Button>(R.id.buttonOK)
+
+        buttonOK = findViewById<Button>(R.id.buttonOK)
         buttonOK.setOnClickListener {
             mediaPlayer?.release()
             returnIntent.putExtra("button_number", 0)
@@ -222,7 +222,7 @@ class PlayRecordsActivity : AppCompatActivity() {
         }
     }
 
-    private fun fetchFileList(folderId: String): String {
+    private fun fetchFileList(folderId: String, callback: (List<String>) -> Unit) {
         val encodedFolderId = URLEncoder.encode(folderId, "UTF-8")
         val url = "${AppConfig.serverIP}/get_wav_files?folderId=$encodedFolderId"
 
@@ -231,29 +231,45 @@ class PlayRecordsActivity : AppCompatActivity() {
             .url(url)
             .build()
 
-        return client.newCall(request).execute().use { response ->
-            if (response.isSuccessful) {
-                response.body?.string() ?: "[]"
-            } else {
-                Log.e("FileListActivity", "Server error: ${response.message}")
-                "[]"
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Log.e("FileListActivity", "Failed to fetch file list", e)
+                // Handle failure
             }
-        }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (it.isSuccessful) {
+                        val jsonData = it.body?.string() ?: "{}"
+                        val jsonObject = JSONObject(jsonData)
+                        val files = jsonObject.optString("files", "")
+                        val labels = jsonObject.optJSONObject("labels") ?: JSONObject()
+
+                        val fileList = files.split(" ").filter { it.isNotEmpty() }
+                        fileList.forEach { fileName ->
+                            fileParameters[fileName] = labels.optString(fileName, "No Label")
+                        }
+                        callback(fileList)
+                    } else {
+                        Log.e("FileListActivity", "Server error: ${response.message}")
+                        // Handle server error
+                        callback(emptyList())
+                    }
+                }
+            }
+        })
     }
 
     private fun setupListView(fileList: List<String>) {
-        val mutableFileList = fileList.toMutableList() // Convert to MutableList
-        val adapter = FileListAdapter(this, mutableFileList, folderId, textViewStatus) {
-            refreshFileList()  // Call refresh when a file is successfully deleted
+        val adapter = FileListAdapter(this, fileList.toMutableList(), folderId, textViewStatus, fileParameters) {
+            refreshFileList()
         }
         listView.adapter = adapter
     }
 
     private fun refreshFileList() {
-        CoroutineScope(Dispatchers.IO).launch {
-            val filesJson = fetchFileList(folderId)
-            val updatedFileList = filesJson.split(" ").filter { it.isNotEmpty() }.toMutableList()
-            withContext(Dispatchers.Main) {
+        fetchFileList(folderId) { updatedFileList ->
+            runOnUiThread {
                 (listView.adapter as FileListAdapter).clear()
                 (listView.adapter as FileListAdapter).addAll(updatedFileList)
                 (listView.adapter as FileListAdapter).notifyDataSetChanged()
@@ -261,12 +277,14 @@ class PlayRecordsActivity : AppCompatActivity() {
         }
     }
 
-
     override fun onDestroy() {
         super.onDestroy()
         mediaPlayer?.release()
-        returnIntent.putExtra("button_number", 0)
-        setResult(Activity.RESULT_OK, returnIntent)
-        finish()
+
+        if (callingActivity != null) {
+            returnIntent.putExtra("button_number", 0)
+            setResult(Activity.RESULT_OK, returnIntent)
+            finish()
+        }
     }
 }

@@ -363,11 +363,11 @@ fun PlaybackButton(context: Context, getResult: ActivityResultLauncher<Intent>, 
         },
         modifier = Modifier
             .height(32.dp)  // Sets the height of the button
-            .width(120.dp),  // Sets the width of the button to make it more elongated
+            .width(128.dp),  // Sets the width of the button to make it more elongated
         shape = RoundedCornerShape(12.dp),  // Sets the corners to be rounded, 12.dp is a moderate roundness
         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
     ) {
-        Text(text = "Play", color = MaterialTheme.colorScheme.onPrimary)  // Ensures text color contrasts with button color
+        Text(text = "РАЗМЕТКА", color = MaterialTheme.colorScheme.onPrimary)  // Ensures text color contrasts with button color
     }
 }
 
