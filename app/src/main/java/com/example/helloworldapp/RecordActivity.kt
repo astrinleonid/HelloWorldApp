@@ -339,19 +339,7 @@ class RecordActivity : ComponentActivity() {
         mediaPlayer.setOnCompletionListener { mp -> mp.release() }
         mediaPlayer.start()
     }
-
-//    private fun sendResult(recording_result: String, buttonNumber: String) {
-//        var result_to_return = "0"
-//        var result_code = RESULT_CANCELED
-//        if (recording_result == "success") {
-//            result_to_return = buttonNumber
-//            result_code = RESULT_OK
-//        }
-//        val data = Intent().apply {
-//            putExtra("button_number", result_to_return)
-//        }
-//        setResult(result_code, data)
-//    }
+    
 
 
     private fun sendResult(recording_result: String, buttonNumber: String) {

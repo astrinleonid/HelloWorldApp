@@ -8,6 +8,8 @@ import android.os.Bundle
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
@@ -19,6 +21,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import com.example.helloworldapp.data.RecordManager
 import com.example.helloworldapp.utils.DialogUtils
+import com.example.helloworldapp.utils.SettingsUtils
 
 
 class TakeRecordsActivity : AppCompatActivity() {
@@ -76,14 +79,32 @@ class TakeRecordsActivity : AppCompatActivity() {
     private fun setupToolbar() {
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
-        supportActionBar?.title =
-            if (isBackView) "@string/back_recording" else "@string/breast_recording"
 
-        findViewById<Button>(R.id.playbackButton).setOnClickListener {
-            val intent = Intent(this, PlayRecordsActivity::class.java).apply {
-                putExtra("UNIQUE_ID", intent.getStringExtra("UNIQUE_ID"))
+        // Set title based on view type
+        supportActionBar?.title = if (isBackView) {
+            getString(R.string.back_recording)
+        } else {
+            getString(R.string.back_recording)
+        }
+
+        // Remove the playback button if it exists
+        val playbackButton = findViewById<Button>(R.id.playbackButton)
+        playbackButton?.visibility = View.GONE
+    }
+
+    // Add these methods for the menu
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_main, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.settings_menu -> {
+                SettingsUtils.showSettingsDialog(this)
+                true
             }
-            getResult.launch(intent)
+            else -> super.onOptionsItemSelected(item)
         }
     }
 
