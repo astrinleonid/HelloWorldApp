@@ -152,11 +152,15 @@ class RecordActivity : ComponentActivity() {
         recordingScope.launch {
             getRecordingId()
             var chunk_index = 0
+            var startTime = System.currentTimeMillis()
+            while (System.currentTimeMillis() - startTime < AppConfig.setupTimeout) { // Wait for the initial setting of the record
+
+            }
             while (isRecording) {
                 val oneSecondData = ByteArrayOutputStream()
                 val audioData = ByteArray(bufferSize)
-                val startTime = System.currentTimeMillis()
-                while (System.currentTimeMillis() - startTime < AppConfig.segmentLength) { // Capture chunks for roughly 1000 milliseconds
+                startTime = System.currentTimeMillis()
+                while (System.currentTimeMillis() - startTime < AppConfig.segmentLength && isRecording) { // Capture chunks for roughly 1000 milliseconds
                     val readResult = audioRecord?.read(audioData, 0, audioData.size)
                         ?: AudioRecord.ERROR_INVALID_OPERATION
                     if (readResult > 0) {
