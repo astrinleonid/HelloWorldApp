@@ -53,9 +53,11 @@ import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.IOException
 
@@ -318,6 +320,66 @@ fun Greeting(name: String, context: Context? = null, modifier: Modifier = Modifi
         )
     }
 }
+
+fun uploadSavedAudioData(context: Context) {
+    // List all offline audio files saved in the app's files directory
+    val files = context.filesDir.listFiles { file -> file.name.startsWith("offline_audio_") }
+
+    files?.forEach { file ->
+        // Extract button_number, record_id, and pointRecordId from the file name
+        val pattern = Regex("offline_audio_btn_(\\d+)_rec_(\\w+)_point_(\\w+)_\\d+\\.wav")
+        val matchResult = pattern.find(file.name)
+
+        if (matchResult != null) {
+            val (buttonNumber, recordId, pointRecordId) = matchResult.destructured
+
+            // Read the audio data
+            val audioData = file.readBytes()
+
+            // Prepare the request body with the extracted parameters
+            val requestBody = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart(
+                    "file", file.name,
+                    audioData.toRequestBody("audio/wav".toMediaTypeOrNull(), 0, audioData.size)
+                )
+                .addFormDataPart("button_number", buttonNumber)
+                .addFormDataPart("record_id", recordId)
+                .addFormDataPart("pointRecordId", pointRecordId)
+                .build()
+
+            // Create the POST request
+            val request = Request.Builder()
+                .url("${AppConfig.serverIP}/upload")
+                .post(requestBody)
+                .build()
+
+            // Execute the request
+            OkHttpClient().newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    Log.e("Upload", "Failed to upload audio data", e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        if (it.isSuccessful) {
+                            Log.i("Upload", "Successfully uploaded ${file.name}")
+                            file.delete() // Delete the file after successful upload
+                        } else {
+                            Log.e("Upload", "Server error: ${response.message}")
+                        }
+                    }
+                }
+            })
+        } else {
+            Log.e("Upload", "Failed to parse identifiers from file name: ${file.name}")
+        }
+    }
+}
+
+
+
+
 
 fun checkServerResponse(callback: (Boolean) -> Unit) {
     val client = OkHttpClient()

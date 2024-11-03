@@ -7,6 +7,7 @@ object AppConfig {
     var setupTimeout = 1500
     var segmentLength = 1361
     var numChunks = 10
+    var online = false
 //    var serverIP: String = "10.0.2.2" // Default value
     // You can add more configuration options here
 }

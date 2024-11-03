@@ -49,6 +49,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -65,6 +66,7 @@ class RecordActivity : ComponentActivity() {
     private var recordId = "111111"
     private var buttonNumber = "0"
     private var isRecording = false
+    private var buttonRecordingsNumber = 0
     private val activeRequests = AtomicInteger(0)
     private var recording_result = "fail"
     private var recordingId = "0"
@@ -154,8 +156,8 @@ class RecordActivity : ComponentActivity() {
             var chunk_index = 0
             var startTime = System.currentTimeMillis()
             while (System.currentTimeMillis() - startTime < AppConfig.setupTimeout) { // Wait for the initial setting of the record
-
             }
+            buttonRecordingsNumber = 0
             while (isRecording) {
                 val oneSecondData = ByteArrayOutputStream()
                 val audioData = ByteArray(bufferSize)
@@ -171,7 +173,15 @@ class RecordActivity : ComponentActivity() {
                 val wavData = WavConverter.pcmToWav(oneSecondData.toByteArray(), sampleRate, 1, 16)
                 oneSecondData.close()
 
-                sendAudioDataToServer(wavData)
+                if (AppConfig.online) {
+                    sendAudioDataToServer(wavData) }
+                else {
+                    saveAudioDataLocally(wavData)
+                    buttonRecordingsNumber += 1
+                    if (buttonRecordingsNumber == AppConfig.numChunks) {
+                        stopRecording("success", buttonNumber )
+                    }
+                }
 
                 oneSecondData.close()
                 chunk_index += 1
@@ -300,7 +310,12 @@ class RecordActivity : ComponentActivity() {
                 response.body?.string()
             } else null
         }
-
+    }
+    private fun saveAudioDataLocally(audioData: ByteArray) {
+        // Create a filename that includes button_number, record_id, and pointRecordId
+        val fileName = "offline_audio_btn_${buttonNumber}_rec_${recordId}_point_${recordingId}_${System.currentTimeMillis()}.wav"
+        val file = File(filesDir, fileName)
+        file.writeBytes(audioData)
     }
 
     private fun stopRecording(result: String, buttonNumber: String) {
