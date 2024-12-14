@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <EditText
+            android:id="@+id/edit_server_ip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Server IP Address"/>
+
+        <EditText
+            android:id="@+id/edit_timeout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Record timeout"
+            android:inputType="number"/>
+
+        <EditText
+            android:id="@+id/edit_num_chunks"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Good segments"
+            android:inputType="number"/>
+
+        <EditText
+            android:id="@+id/edit_chunk_length"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Segment length"
+            android:inputType="number"/>
+
+        <CheckBox
+            android:id="@+id/checkbox_https"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Use HTTPS"/>
+
+    </LinearLayout>
+</ScrollView>
