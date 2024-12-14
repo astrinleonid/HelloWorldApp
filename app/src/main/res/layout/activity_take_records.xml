@@ -1,33 +1,144 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="true"
-    tools:context=".TakeRecordsActivity">
+    android:background="@color/white"
+    android:elevation="@dimen/fab_margin">
 
-    <com.google.android.material.appbar.AppBarLayout
+    <!-- Top Toolbar -->
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/top_app_bar"
         android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@android:color/white"
+        android:title="Запись точек на спине"
+        android:titleTextColor="@android:color/black">
+
+        <!-- Button inside the Toolbar -->
+        <Button
+            android:id="@+id/button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="РАЗМЕТКА"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="16dp"/>
+
+        <TextView
+            android:id="@+id/textView2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Запись точек на спине"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/black"
+            android:fontFamily="sans-serif-medium"
+            android:padding="8dp"/>
+
+    </androidx.appcompat.widget.Toolbar>
+
+    <!-- Background Image -->
+    <ImageView
+        android:id="@+id/background_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/top_app_bar"
+        android:scaleType="centerCrop"
+        android:src="@drawable/back_background"/>
+
+    <!-- Grid of Buttons -->
+    <GridLayout
+        android:id="@+id/button_grid"
+        android:layout_width="350dp"
         android:layout_height="wrap_content"
-        android:fitsSystemWindows="true">
+        android:layout_below="@id/top_app_bar"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="150dp"
+        android:columnCount="2"
+        android:paddingHorizontal="32dp"
+        android:rowCount="2">
 
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize" />
+        <Button
+            android:id="@+id/button_1"
+            android:layout_width="@dimen/point_button_size"
+            android:layout_height="@dimen/point_button_size"
+            android:layout_centerHorizontal="true"
+            android:layout_margin="@dimen/point_button_margin"
+            android:text="1"/>
 
-    </com.google.android.material.appbar.AppBarLayout>
+        <Button
+            android:id="@+id/button_2"
+            android:layout_width="@dimen/point_button_size"
+            android:layout_height="@dimen/point_button_size"
+            android:layout_centerHorizontal="true"
+            android:layout_margin="@dimen/point_button_margin"
+            android:text="2"/>
 
-    <include layout="@layout/content_take_records" />
+        <Button
+            android:id="@+id/button_3"
+            android:layout_width="@dimen/point_button_size"
+            android:layout_height="@dimen/point_button_size"
+            android:layout_centerHorizontal="true"
+            android:layout_margin="@dimen/point_button_margin"
+            android:text="3"/>
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fab"
+        <Button
+            android:id="@+id/button_4"
+            android:layout_width="@dimen/point_button_size"
+            android:layout_height="@dimen/point_button_size"
+            android:layout_centerHorizontal="true"
+            android:layout_margin="@dimen/point_button_margin"
+            android:text="4"/>
+
+        <Button
+            android:id="@+id/button_5"
+            android:layout_width="@dimen/point_button_size"
+            android:layout_height="@dimen/point_button_size"
+            android:layout_centerHorizontal="true"
+            android:layout_margin="@dimen/point_button_margin"
+            android:text="5"/>
+
+        <Button
+            android:id="@+id/button_6"
+            android:layout_width="@dimen/point_button_size"
+            android:layout_height="@dimen/point_button_size"
+            android:layout_centerHorizontal="true"
+            android:layout_margin="@dimen/point_button_margin"
+            android:text="6"/>
+    </GridLayout>
+
+    <!-- Done Button at the Bottom -->
+    <Button
+        android:id="@+id/done_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_marginEnd="@dimen/fab_margin"
-        android:layout_marginBottom="16dp"
-        app:srcCompat="@android:drawable/ic_dialog_email" />
+        android:layout_alignParentStart="true"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentBottom="true"
+        android:layout_marginStart="30dp"
+        android:layout_marginEnd="30dp"
+        android:layout_marginBottom="32dp"
+        android:text="ГОТОВО"/>
 
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+    <!-- ImageView with Rounded Border -->
+    <ImageView
+        android:id="@+id/imageView2"
+        android:layout_width="117dp"
+        android:layout_height="127dp"
+        android:layout_below="@+id/top_app_bar"
+        android:layout_alignParentStart="true"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginEnd="10dp"
+        android:layout_marginBottom="10dp"
+        android:background="@drawable/rounded_border"
+        android:contentDescription="Back Button"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/breast_icon"/>
+
+
+
+</RelativeLayout>
+

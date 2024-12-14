@@ -6,7 +6,11 @@
     <string name="second_fragment_label">Second Fragment</string>
     <string name="next">Next</string>
     <string name="previous">Previous</string>
-
+    <string name="app_intro">
+        Нажми на фиолетовый круг и прижми телефон микрофоном к соответствующей области на теле.
+        Удерживай телефон плотно прижав его к телу и не шевеля, пока не услышишь короткий двойной сигнал.
+        Длинный сигнал означает, что запись не удалась, повтори процедуру
+    </string>
 
     <string name="lorem_ipsum">
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam in scelerisque sem. Mauris
