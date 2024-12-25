@@ -207,7 +207,7 @@ class PlayRecordsActivity : AppCompatActivity() {
         textViewStatus = findViewById(R.id.textViewStatus)
         folderId = intent.getStringExtra("UNIQUE_ID") ?: ""
 
-        fetchFileList(folderId) { fileList ->
+        fetchFileListFromServer(folderId) { fileList ->
             runOnUiThread {
                 setupListView(fileList)
             }
@@ -222,7 +222,7 @@ class PlayRecordsActivity : AppCompatActivity() {
         }
     }
 
-    private fun fetchFileList(folderId: String, callback: (List<String>) -> Unit) {
+    private fun fetchFileListFromServer(folderId: String, callback: (List<String>) -> Unit) {
         val encodedFolderId = URLEncoder.encode(folderId, "UTF-8")
         val url = "${AppConfig.serverIP}/get_wav_files?folderId=$encodedFolderId"
 
@@ -268,7 +268,7 @@ class PlayRecordsActivity : AppCompatActivity() {
     }
 
     private fun refreshFileList() {
-        fetchFileList(folderId) { updatedFileList ->
+        fetchFileListFromServer(folderId) { updatedFileList ->
             runOnUiThread {
                 (listView.adapter as FileListAdapter).clear()
                 (listView.adapter as FileListAdapter).addAll(updatedFileList)

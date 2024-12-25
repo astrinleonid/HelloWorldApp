@@ -10,30 +10,11 @@ import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Bundle
 import android.util.Log
+import android.widget.Button
+import android.widget.TextView
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.example.helloworldapp.ui.theme.HelloWorldAppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -76,6 +57,9 @@ class RecordActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_record)
+        buttonNumber = intent.getStringExtra("button_number") ?: "0"
+        findViewById<TextView>(R.id.buttonNumberText).text = "Recording point ${buttonNumber}"
 
         // Request permissions if they have not been granted yet
         if (ContextCompat.checkSelfPermission(
@@ -95,21 +79,9 @@ class RecordActivity : ComponentActivity() {
             startRecording()
         }
 
-        setContent {
-            HelloWorldAppTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = Color.White
-                ) {
-                    // Extract the button number within onCreate
-                    buttonNumber = intent.getStringExtra("button_number") ?: "0"
-                    recordId = intent.getStringExtra("UNIQUE_ID") ?: "111111"
-                    //result = buttonNumber
-                    RecordingScreen(buttonNumber = buttonNumber, stopRecordingCallback = { result, buttonNum ->
-                        stopRecording(result, buttonNum)
-                    })
-                }
-            }
+        // Set up the cancel button click listener
+        findViewById<Button>(R.id.cancelButton).setOnClickListener {
+            stopRecording("abort", "0")
         }
     }
 
@@ -131,8 +103,6 @@ class RecordActivity : ComponentActivity() {
     }
 
     private fun startRecording() {
-
-
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.RECORD_AUDIO
@@ -153,42 +123,59 @@ class RecordActivity : ComponentActivity() {
 
         recordingScope.launch {
             getRecordingId()
-            var chunk_index = 0
             var startTime = System.currentTimeMillis()
-            while (System.currentTimeMillis() - startTime < AppConfig.setupTimeout) { // Wait for the initial setting of the record
+            while (System.currentTimeMillis() - startTime < AppConfig.setupTimeout) {
+                // Wait for the initial setting of the record
             }
-            buttonRecordingsNumber = 0
-            while (isRecording) {
-                val oneSecondData = ByteArrayOutputStream()
+
+            if (AppConfig.online) {
+                // Online mode - record and send chunks
+                var chunk_index = 0
+                while (isRecording) {
+                    val oneSecondData = ByteArrayOutputStream()
+                    val audioData = ByteArray(bufferSize)
+                    startTime = System.currentTimeMillis()
+
+                    while (System.currentTimeMillis() - startTime < AppConfig.segmentLength && isRecording) {
+                        val readResult = audioRecord?.read(audioData, 0, audioData.size)
+                            ?: AudioRecord.ERROR_INVALID_OPERATION
+                        if (readResult > 0) {
+                            oneSecondData.write(audioData, 0, readResult)
+                        }
+                    }
+
+                    val wavData = WavConverter.pcmToWav(oneSecondData.toByteArray(), sampleRate, 1, 16)
+                    oneSecondData.close()
+                    sendAudioDataToServer(wavData)
+
+                    chunk_index += 1
+                    if (chunk_index > AppConfig.timeOut) {
+                        recording_result = "timeout"
+                        stopRecording(recording_result, buttonNumber)
+                    }
+                }
+            } else {
+                // Offline mode - record one continuous piece
+                val fullRecordingData = ByteArrayOutputStream()
                 val audioData = ByteArray(bufferSize)
                 startTime = System.currentTimeMillis()
-                while (System.currentTimeMillis() - startTime < AppConfig.segmentLength && isRecording) { // Capture chunks for roughly 1000 milliseconds
+
+                // Record for a fixed duration (AppConfig.segmentLength * AppConfig.numChunks milliseconds)
+                val recordingDuration = AppConfig.segmentLength * AppConfig.numChunks
+
+                while (System.currentTimeMillis() - startTime < recordingDuration && isRecording) {
                     val readResult = audioRecord?.read(audioData, 0, audioData.size)
                         ?: AudioRecord.ERROR_INVALID_OPERATION
                     if (readResult > 0) {
-                        oneSecondData.write(audioData, 0, readResult)
-                    }
-                }
-                // After collecting 1 second of audio, convert it to wav
-                val wavData = WavConverter.pcmToWav(oneSecondData.toByteArray(), sampleRate, 1, 16)
-                oneSecondData.close()
-
-                if (AppConfig.online) {
-                    sendAudioDataToServer(wavData) }
-                else {
-                    saveAudioDataLocally(wavData)
-                    buttonRecordingsNumber += 1
-                    if (buttonRecordingsNumber == AppConfig.numChunks) {
-                        stopRecording("success", buttonNumber )
+                        fullRecordingData.write(audioData, 0, readResult)
                     }
                 }
 
-                oneSecondData.close()
-                chunk_index += 1
-                if (chunk_index > AppConfig.timeOut) {
-                    recording_result = "timeout"
-                    stopRecording(recording_result, buttonNumber)
-                }
+                val wavData = WavConverter.pcmToWav(fullRecordingData.toByteArray(), sampleRate, 1, 16)
+                fullRecordingData.close()
+                saveAudioDataLocally(wavData)
+                recording_result = "success"
+                stopRecording(recording_result, buttonNumber)
             }
 
             sendSaveCommandToServer(recording_result, buttonNumber)
@@ -352,39 +339,6 @@ class RecordActivity : ComponentActivity() {
 }
 
 
-@Composable
-fun RecordingScreen(buttonNumber: String, stopRecordingCallback: (String, String) -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center // Centers the content inside the box
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.Center, // Centers the column content vertically
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Image(
-                painter = painterResource(R.drawable.recording_image),
-                contentDescription = "Recording in progress",
-                modifier = Modifier.size(200.dp)
-            )
-            Text(text = "Recording...", modifier = Modifier.padding(top = 16.dp))
-        }
-
-        Button(
-            onClick = { stopRecordingCallback("abort", "0") },
-            modifier = Modifier
-                .align(Alignment.BottomCenter) // Position the button at the bottom center of the Box
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-        ) {
-            Text(text = "ОТМЕНА", color = MaterialTheme.colorScheme.onPrimary)
-        }
-    }
-}
 
 object WavConverter {
     fun pcmToWav(pcmData: ByteArray, sampleRate: Int, channels: Int, bitDepth: Int): ByteArray {

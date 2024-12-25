@@ -1,6 +1,7 @@
 <resources>
     <dimen name="fab_margin">16dp</dimen>
     <dimen name="point_button_size">80dp</dimen>
-    <dimen name="point_button_margin">30dp</dimen>
+    <dimen name="point_button_margin">26dp</dimen>
+    <dimen name="grid_button_size">80dp</dimen>
 
 </resources>

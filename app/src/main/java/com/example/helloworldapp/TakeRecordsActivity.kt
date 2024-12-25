@@ -1,434 +1,248 @@
 package com.example.helloworldapp
 
-
+import AppConfig
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.view.Gravity
+import android.widget.Button
+import android.widget.GridLayout
+import android.widget.ImageButton
 import android.widget.Toast
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
-import com.example.helloworldapp.ui.theme.HelloWorldAppTheme
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import okhttp3.Callback
 import org.json.JSONArray
 import java.io.IOException
 
-class TakeRecordsActivity : ComponentActivity() {
+class TakeRecordsActivity : AppCompatActivity() {
+    private val buttonStates = mutableListOf<Boolean>().apply { addAll(List(10) { false }) }
+    private lateinit var buttonGrid: GridLayout
+    private var isBackView: Boolean = true // Track which view we're showing
 
-    private val buttonColors = mutableStateListOf<Boolean>().apply { addAll(List(10) { false }) }
-    private val showDialog = mutableStateOf(false)
+    companion object {
+        const val EXTRA_VIEW_TYPE = "view_type"
+        const val VIEW_TYPE_BACK = "back"
+        const val VIEW_TYPE_FRONT = "front"
+    }
+
     private val getResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val data = result.data
-            val buttonNumber = data?.getStringExtra("button_number")?.toIntOrNull()
+            val buttonNumber = result.data?.getStringExtra("button_number")?.toIntOrNull()
             buttonNumber?.let {
-                if (it in 5..buttonColors.size) {
-                    buttonColors[it -1] = true // Update the color state for the button
+                if (it in 1..buttonStates.size) {
+                    buttonStates[it - 1] = true
+                    updateButtonColor(it - 1)
                 }
             }
         }
         val uniqueId = intent.getStringExtra("UNIQUE_ID")
-        fetchButtonColors(uniqueId) { buttonStates ->
-            buttonStates?.let {
+        fetchButtonColors(uniqueId) { states ->
+            states?.let {
                 runOnUiThread {
-                    buttonColors.clear()
-                    buttonColors.addAll(it)
+                    buttonStates.clear()
+                    buttonStates.addAll(it)
+                    updateAllButtonColors()
                 }
-            } ?: run {
-                println("Failed to fetch or parse button states.")
             }
         }
     }
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        isBackView = intent.getStringExtra(EXTRA_VIEW_TYPE) != VIEW_TYPE_FRONT
+        setContentView(if (isBackView) R.layout.activity_take_records_back else R.layout.activity_take_records_front)
+
         val uniqueId = intent.getStringExtra("UNIQUE_ID")
-        fetchButtonColors(uniqueId) { buttonStates ->
-            buttonStates?.let {
-                // Update your state here
+        setupToolbar()
+        setupButtons()
+        createButtonGrid()
+
+        fetchButtonColors(uniqueId) { states ->
+            states?.let {
                 runOnUiThread {
-                    // Assuming buttonColors is a mutableStateListOf<Boolean>
-                    buttonColors.clear()
-                    buttonColors.addAll(it)
-                }
-            } ?: run {
-                // Handle error or null state
-                println("Failed to fetch or parse button states.")
-            }
-        }
-        setContent {
-            HelloWorldAppTheme {
-                Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = Color.White
-                ){
-                    MainContent(uniqueId, buttonColors, getResult)
+                    buttonStates.clear()
+                    buttonStates.addAll(it)
+                    updateAllButtonColors()
                 }
             }
         }
+    }
+
+    private fun setupToolbar() {
+        val toolbar = findViewById<Toolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        supportActionBar?.title =
+            if (isBackView) "@string/back_recording" else "@string/breast_recording"
+
+        findViewById<Button>(R.id.playbackButton).setOnClickListener {
+            val intent = Intent(this, PlayRecordsActivity::class.java).apply {
+                putExtra("UNIQUE_ID", intent.getStringExtra("UNIQUE_ID"))
+            }
+            getResult.launch(intent)
+        }
+    }
+
+    private fun setupButtons() {
+        // Change from Button to ImageButton
+        findViewById<ImageButton>(R.id.changeSideButton).setOnClickListener {
+            val intent = Intent(this, TakeRecordsActivity::class.java).apply {
+                putExtra("UNIQUE_ID", this@TakeRecordsActivity.intent.getStringExtra("UNIQUE_ID"))
+                putExtra(EXTRA_VIEW_TYPE, if (isBackView) VIEW_TYPE_FRONT else VIEW_TYPE_BACK)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            startActivity(intent)
+            finish()
+        }
+
+        findViewById<Button>(R.id.doneButton).setOnClickListener {
+            showConfirmationDialog()
+        }
+    }
+
+    private fun createButtonGrid() {
+        buttonGrid = findViewById(R.id.buttonGrid)
+        val buttonRange = if (isBackView) 5..10 else 1..4
+
+        for (i in buttonRange) {
+            val button = createRoundButton(i)
+            val buttonMargin = resources.getDimensionPixelSize(R.dimen.point_button_margin)
+            val params = GridLayout.LayoutParams().apply {
+                width = resources.getDimensionPixelSize(R.dimen.grid_button_size)
+                height = resources.getDimensionPixelSize(R.dimen.grid_button_size)
+                // Set larger margins for better spacing
+                setMargins(buttonMargin, buttonMargin, buttonMargin, buttonMargin)
+            }
+            buttonGrid.addView(button, params)
+        }
+    }
+    private fun createRoundButton(number: Int): Button {
+        return Button(this).apply {
+            text = number.toString()
+            setBackgroundResource(R.drawable.round_button_background)
+            setOnClickListener {
+                val intent = Intent(this@TakeRecordsActivity, RecordActivity::class.java).apply {
+                    putExtra("button_number", number.toString())
+                    putExtra("UNIQUE_ID", this@TakeRecordsActivity.intent.getStringExtra("UNIQUE_ID"))
+                }
+                getResult.launch(intent)
+            }
+        }
+    }
+
+    private fun updateButtonColor(index: Int) {
+        val buttonIndex = if (isBackView) index - 5 else index
+        val button = buttonGrid.getChildAt(buttonIndex) as? Button
+        button?.setBackgroundResource(
+            if (buttonStates[index]) R.drawable.round_button_selected
+            else R.drawable.round_button_background
+        )
+    }
+
+    private fun updateAllButtonColors() {
+        val range = if (isBackView) 5..10 else 1..4
+        for (i in range) {
+            updateButtonColor(i - 1)
+        }
+        if (buttonStates.all { it }) {
+            showConfirmationDialog()
+        }
+    }
+
+    private fun showConfirmationDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_confirmation, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        dialogView.findViewById<Button>(R.id.btnSaveAndExit).setOnClickListener {
+            dialog.dismiss()
+            val intent = Intent(this, ShowQrActivity::class.java).apply {
+                putExtra("UNIQUE_ID", this@TakeRecordsActivity.intent.getStringExtra("UNIQUE_ID"))
+            }
+            startActivity(intent)
+            finish()
+        }
+
+        dialogView.findViewById<Button>(R.id.btnExitWithoutSaving).setOnClickListener {
+            dialog.dismiss()
+            sendDeleteCommand(intent.getStringExtra("UNIQUE_ID"), this)
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
+        }
+
+        dialogView.findViewById<Button>(R.id.btnCancel).setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
 
     override fun onBackPressed() {
-        // If the user presses back, return "0"
-        showDialog.value = true
-//        super.onBackPressed()
+        showConfirmationDialog()
     }
 
-    @OptIn(ExperimentalMaterial3Api::class)
-    @Composable
-    fun MainContent(uniqueId: String?,
-                    buttonColors: SnapshotStateList<Boolean>, // Adjusted type here
-                    getResult: ActivityResultLauncher<Intent>) {
+    private fun sendDeleteCommand(uniqueId: String?, context: Context) {
+        val url = "${AppConfig.serverIP}/record_delete?record_id=${uniqueId}"
 
-        val context = LocalContext.current
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .build()
 
-        if (buttonColors.all { it }) {
-            showDialog.value = true
-        }
-            Scaffold(
-                containerColor = Color.White,
-                topBar = {
-                    TopAppBar(
-                        title = { Text("Запись точек на спине") },
-                        colors = TopAppBarDefaults.smallTopAppBarColors(
-                            containerColor = Color.White,  // Set the background color of the TopAppBar
-                            titleContentColor = Color.Black  // Set the color of the title text
-                        ),
-                        actions = {
-                            PlaybackButton(context = context, getResult = getResult, uniqueId = uniqueId)
+        OkHttpClient().newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    Toast.makeText(context, "Error deleting record", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                runOnUiThread {
+                    if (response.isSuccessful) {
+                        Toast.makeText(context, "Record deleted successfully", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Failed to delete record: ${response.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        })
+    }
+
+    private fun fetchButtonColors(recordId: String?, callback: (List<Boolean>?) -> Unit) {
+        val client = OkHttpClient()
+        val request = Request.Builder()
+            .url("${AppConfig.serverIP}/get_button_states?record_id=$recordId")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                e.printStackTrace()
+                callback(null)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use { res ->
+                    if (res.isSuccessful) {
+                        val jsonData = res.body?.string()
+                        val jsonArray = JSONArray(jsonData)
+                        val buttonColors = mutableListOf<Boolean>()
+                        for (i in 0 until jsonArray.length()) {
+                            buttonColors.add(jsonArray.getBoolean(i))
                         }
-                    )
-                },
-                bottomBar = {
-                    DoneButton {
-                        showDialog.value = true
-                    }
-                }
-            ) { paddingValues ->
-                Box(
-                    modifier = Modifier
-                        .padding(paddingValues)
-                        .fillMaxSize()
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.back_background),
-                        contentDescription = "Background Image",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                    val intent = Intent(context, TakeRecordsFrontActivity::class.java).apply {
-                        putExtra("UNIQUE_ID", uniqueId)
-                    }
-                    ChangeSideButton(intent = intent,
-                                    context = context,
-                                    getResult = getResult,
-                                    uniqueId = uniqueId,
-                                    iconResId = R.drawable.breast_icon)
-                    ButtonGrid(
-                        context = context,
-                        buttonColors = buttonColors,
-                        getResult = getResult,
-                        uniqueId = uniqueId,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 50.dp)
-                    )
-
-                    if (showDialog.value) {
-                        ConfirmationDialog(
-                            onSaveAndExit = {
-                                showDialog.value = false
-                                val intent = Intent(context, ShowQrActivity::class.java).apply {
-                                    putExtra("UNIQUE_ID", uniqueId)
-                                }
-                                context.startActivity(intent)
-                                finish()
-                            },
-                            onDismiss = { showDialog.value = false },
-                            onExitWithoutSaving = {
-                                showDialog.value = false
-                                sendDeleteCommand(uniqueId, context)
-                                context.startActivity(Intent(context, MainActivity::class.java))
-                                finish()}
-
-                        )
-                    }
-                }
-
-        }
-    }
-}
-
-fun showCenteredToast(context: Context, message: String) {
-    val toast = Toast.makeText(context, message, Toast.LENGTH_LONG)
-    toast.setGravity(Gravity.CENTER, 0, 0) // Center the toast
-    toast.show()
-}
-
-
-
-@Composable
-fun ButtonGrid(context: Context,  buttonColors: List<Boolean>, getResult: ActivityResultLauncher<Intent>,  modifier: Modifier = Modifier, uniqueId: String?) {
-    Column(
-        verticalArrangement = Arrangement.SpaceAround,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-            .padding(horizontal = 32.dp)
-            .padding(top = 96.dp)
-            .fillMaxWidth()
-    ) {
-        (5..10).chunked(2).forEach { pair ->
-            ButtonRow(buttonLabels = pair, buttonColors = buttonColors, getResult = getResult, context = context, uniqueId = uniqueId)
-        }
-    }
-}
-
-@Composable
-fun ButtonRow(buttonLabels: List<Int>, buttonColors: List<Boolean>, getResult: ActivityResultLauncher<Intent>, context: Context, uniqueId: String?) {
-
-    Row(
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-    ) {
-        buttonLabels.forEach {label ->
-            val isSelected = buttonColors[label - 1]
-            RoundButton(label = "$label", isSelected = isSelected, getResult = getResult, context = context, uniqueId = uniqueId)
-        }
-    }
-}
-
-
-@Composable
-fun RoundButton(label: String, isSelected: Boolean, getResult: ActivityResultLauncher<Intent>, context: Context, uniqueId: String?) {
-    val backgroundColor = if (isSelected) Color.Green else MaterialTheme.colorScheme.primary
-
-    Button(
-        onClick = {
-            // Here, you would launch RecordActivity for a result
-            val intent = Intent(context, RecordActivity::class.java).apply {
-                putExtra("button_number", label)
-                putExtra("UNIQUE_ID", uniqueId)
-            }
-            getResult.launch(intent)
-        },
-        shape = CircleShape,
-        modifier = Modifier
-            .padding(8.dp)
-            .size(80.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = backgroundColor)
-    ) {
-        Text(text = label, color = Color.White)
-    }
-}
-
-fun sendDeleteCommand(uniqueId: String?, context: Context) {
-    val url = "${AppConfig.serverIP}/record_delete?record_id=${uniqueId}"
-
-    val request = Request.Builder()
-        .url(url)
-        .get() // Using GET as specified
-        .build()
-
-    OkHttpClient().newCall(request).enqueue(object : okhttp3.Callback {
-        override fun onFailure(call: okhttp3.Call, e: IOException) {
-            // Handle failure, e.g., update UI on main thread
-            (context as? Activity)?.runOnUiThread {
-                Toast.makeText(context,"Error deleting record", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-            (context as? Activity)?.runOnUiThread {
-                if (response.isSuccessful) {
-                    Toast.makeText(context,"Record deleted successfully", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(context,"Failed to delete record: ${response.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    })
-}
-
-
-@Composable
-fun ConfirmationDialog(
-    onSaveAndExit: () -> Unit,
-    onExitWithoutSaving: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = { onDismiss() },
-        title = { Text("Подтвердить") },
-        text = {
-            Column {
-                Text("Сохранить записи на сервере и выйти?")
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Button(onClick = onSaveAndExit) {
-                        Text("Сохранить и выйти")
+                        callback(buttonColors)
+                    } else {
+                        callback(null)
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(onClick = onExitWithoutSaving) {
-                Text("Не сохранять")
-            }
-        },
-        dismissButton = {
-            Button(onClick = onDismiss) {
-                Text("Отмена")
-            }
-        }
-    )
-}
-
-@Composable
-fun DoneButton(onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp), // Adjust padding as necessary
-        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-    ) {
-        Text("ГОТОВО", color = MaterialTheme.colorScheme.onPrimary)
+        })
     }
 }
-
-@Composable
-fun PlaybackButton(context: Context, getResult: ActivityResultLauncher<Intent>, uniqueId: String?) {
-    Button(
-        onClick = {
-            // Intent to start the playback activity
-            val intent = Intent(context, PlayRecordsActivity::class.java).apply {
-                putExtra("UNIQUE_ID", uniqueId)
-            }
-            getResult.launch(intent)
-        },
-        modifier = Modifier
-            .height(32.dp)  // Sets the height of the button
-            .width(128.dp),  // Sets the width of the button to make it more elongated
-        shape = RoundedCornerShape(12.dp),  // Sets the corners to be rounded, 12.dp is a moderate roundness
-        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-    ) {
-        Text(text = "РАЗМЕТКА", color = MaterialTheme.colorScheme.onPrimary)  // Ensures text color contrasts with button color
-    }
-}
-
-@Composable
-fun ChangeSideButton(
-    intent: Intent,
-    context: Context,
-    getResult: ActivityResultLauncher<Intent>,
-    uniqueId: String?,
-    iconResId: Int
-) {
-    val icon = painterResource(id = iconResId)
-
-    Button(
-        onClick = {
-            context.startActivity(intent)
-        },
-        modifier = Modifier
-            .height(160.dp)
-            .width(140.dp)
-            .padding(10.dp),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(2.dp, Color.Black),
-        colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-        contentPadding = PaddingValues(0.dp) // Add this line
-    ) {
-        Icon(
-            painter = icon,
-            contentDescription = "Button Icon",
-            tint = Color.Unspecified, // Use Color.Unspecified to prevent tinting
-            modifier = Modifier.size(1203.dp)
-        )
-    }
-}
-
-fun fetchButtonColors(recordId: String?, callback: (List<Boolean>?) -> Unit) {
-    val client = OkHttpClient()
-    val request = Request.Builder()
-        .url("${AppConfig.serverIP}/get_button_states?record_id=$recordId")
-        .build()
-
-    client.newCall(request).enqueue(object : Callback {
-        override fun onFailure(call: Call, e: IOException) {
-            e.printStackTrace()
-            callback(null) // Pass null or an empty list to indicate failure
-        }
-
-        override fun onResponse(call: Call, response: Response) {
-            response.use { res ->
-                if (res.isSuccessful) {
-                    val jsonData = res.body?.string()
-                    val jsonArray = JSONArray(jsonData)
-                    val buttonColors = mutableListOf<Boolean>()
-                    for (i in 0 until jsonArray.length()) {
-                        buttonColors.add(jsonArray.getBoolean(i))
-                    }
-                    callback(buttonColors)
-                } else {
-                    callback(null) // Handle the error, e.g., show error message
-                }
-            }
-        }
-    })
-}
-
-// Usage example within an activity or another composable scope:
-

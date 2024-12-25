@@ -38,10 +38,10 @@
             android:inputType="number"/>
 
         <CheckBox
-            android:id="@+id/checkbox_https"
+            android:id="@+id/checkbox_online"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Use HTTPS"/>
+            android:text="Online"/>
 
     </LinearLayout>
 </ScrollView>

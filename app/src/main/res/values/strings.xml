@@ -11,6 +11,8 @@
         Удерживай телефон плотно прижав его к телу и не шевеля, пока не услышишь короткий двойной сигнал.
         Длинный сигнал означает, что запись не удалась, повтори процедуру
     </string>
+    <string name="chest_recording">Запись точек на груди</string>
+    <string name="back_recording">Запись точек на спине</string>
 
     <string name="lorem_ipsum">
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam in scelerisque sem. Mauris
