@@ -26,6 +26,7 @@ import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.Response
 import org.json.JSONObject
+import java.io.File
 import java.io.IOException
 import java.net.URLEncoder
 
@@ -130,23 +131,28 @@ class FileListAdapter(
         mediaPlayer?.release()
         mediaPlayer = MediaPlayer().apply {
             try {
-                val encodedFolderId = URLEncoder.encode(folderId, "UTF-8")
-                val encodedFileName = URLEncoder.encode(fileName, "UTF-8")
-                val url =
-                    "${AppConfig.serverIP}/file_download?fileName=$encodedFileName&folderId=$encodedFolderId"
+                if (AppConfig.online) {
+                    val encodedFolderId = URLEncoder.encode(folderId, "UTF-8")
+                    val encodedFileName = URLEncoder.encode(fileName, "UTF-8")
+                    val url = "${AppConfig.serverIP}/file_download?fileName=$encodedFileName&folderId=$encodedFolderId"
+                    setDataSource(url)
+                } else {
+                    // Play local file
+                    val file = File(context.filesDir, fileName)
+                    setDataSource(file.absolutePath)
+                }
 
-                setDataSource(url)
                 textViewStatus.text = "Loading..."
                 prepareAsync()
                 setOnPreparedListener {
-                    start()  // Start playback once the media is prepared
+                    start()
                     textViewStatus.text = "Playing: $fileName"
                 }
                 setOnErrorListener { mp, what, extra ->
                     textViewStatus.text = "Error: $what"
                     Log.e("MediaPlayer", "Error playing file: $what, $extra")
-                    mp.release()  // Ensure resources are released on error
-                    true  // Handle the error and prevent further processing
+                    mp.release()
+                    true
                 }
             } catch (e: Exception) {
                 Log.e("MediaPlayer", "Error setting data source", e)
@@ -156,6 +162,35 @@ class FileListAdapter(
     }
 
     private fun deleteFile(folderId: String, fileName: String) {
+        if (AppConfig.online) {
+            deleteFileFromServer(folderId, fileName)
+        } else {
+            deleteFileLocally(fileName)
+        }
+    }
+
+    private fun deleteFileLocally(fileName: String) {
+        try {
+            val file = File(context.filesDir, fileName)
+            if (file.exists() && file.delete()) {
+                (context as Activity).runOnUiThread {
+                    fileList.remove(fileName)
+                    notifyDataSetChanged()
+                    onDeleteSuccess()
+                }
+            } else {
+                (context as Activity).runOnUiThread {
+                    Toast.makeText(context, "Failed to delete file", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("FileListAdapter", "Error deleting local file", e)
+            (context as Activity).runOnUiThread {
+                Toast.makeText(context, "Error deleting file", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    private fun deleteFileFromServer(folderId: String, fileName: String) {
         val client = OkHttpClient()
         val encodedFolderId = URLEncoder.encode(folderId, "UTF-8")
         val encodedFileName = URLEncoder.encode(fileName, "UTF-8")
@@ -207,10 +242,16 @@ class PlayRecordsActivity : AppCompatActivity() {
         textViewStatus = findViewById(R.id.textViewStatus)
         folderId = intent.getStringExtra("UNIQUE_ID") ?: ""
 
-        fetchFileListFromServer(folderId) { fileList ->
-            runOnUiThread {
-                setupListView(fileList)
+        if (AppConfig.online) {
+            fetchFileListFromServer(folderId) { fileList ->
+                runOnUiThread {
+                    setupListView(fileList)
+                }
             }
+        } else {
+            // Handle offline mode
+            val fileList = getLocalFiles(folderId)
+            setupListView(fileList)
         }
 
         buttonOK = findViewById<Button>(R.id.buttonOK)
@@ -222,6 +263,13 @@ class PlayRecordsActivity : AppCompatActivity() {
         }
     }
 
+    private fun getLocalFiles(folderId: String): List<String> {
+        val files = filesDir.listFiles { file ->
+            file.name.startsWith("offline_audio") &&
+                    file.name.contains("rec_${folderId}")
+        }
+        return files?.map { it.name } ?: emptyList()
+    }
     private fun fetchFileListFromServer(folderId: String, callback: (List<String>) -> Unit) {
         val encodedFolderId = URLEncoder.encode(folderId, "UTF-8")
         val url = "${AppConfig.serverIP}/get_wav_files?folderId=$encodedFolderId"
@@ -288,3 +336,13 @@ class PlayRecordsActivity : AppCompatActivity() {
         }
     }
 }
+
+
+
+
+
+
+
+
+
+

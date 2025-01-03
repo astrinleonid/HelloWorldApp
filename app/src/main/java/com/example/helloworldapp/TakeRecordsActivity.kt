@@ -22,17 +22,19 @@ import org.json.JSONArray
 import java.io.IOException
 
 class TakeRecordsActivity : AppCompatActivity() {
-    private val buttonStates = mutableListOf<Boolean>().apply { addAll(List(10) { false }) }
-    private lateinit var buttonGrid: GridLayout
-    private var isBackView: Boolean = true // Track which view we're showing
-
     companion object {
         const val EXTRA_VIEW_TYPE = "view_type"
         const val VIEW_TYPE_BACK = "back"
         const val VIEW_TYPE_FRONT = "front"
+        private val buttonStates = mutableListOf<Boolean>().apply { addAll(List(10) { false }) } // Make it static
+        private var currentUniqueId: String? = null // Track current UniqueID
     }
 
+    private lateinit var buttonGrid: GridLayout
+    private var isBackView: Boolean = true
+
     private val getResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+
         if (result.resultCode == Activity.RESULT_OK) {
             val buttonNumber = result.data?.getStringExtra("button_number")?.toIntOrNull()
             buttonNumber?.let {
@@ -41,38 +43,55 @@ class TakeRecordsActivity : AppCompatActivity() {
                     updateButtonColor(it - 1)
                 }
             }
-        }
-        val uniqueId = intent.getStringExtra("UNIQUE_ID")
-        fetchButtonColors(uniqueId) { states ->
-            states?.let {
-                runOnUiThread {
-                    buttonStates.clear()
-                    buttonStates.addAll(it)
-                    updateAllButtonColors()
+
+            if (AppConfig.online) {
+                val uniqueId = intent.getStringExtra("UNIQUE_ID")
+                fetchButtonColors(uniqueId) { states ->
+                    states?.let {
+                        runOnUiThread {
+                            buttonStates.clear()
+                            buttonStates.addAll(it)
+                            updateAllButtonColors()
+                        }
+                    }
                 }
             }
         }
     }
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val newUniqueId = intent.getStringExtra("UNIQUE_ID")
+        // Reset button states if UniqueID changes
+        if (currentUniqueId != newUniqueId) {
+            buttonStates.clear()
+            buttonStates.addAll(List(10) { false })
+            currentUniqueId = newUniqueId
+        }
 
         isBackView = intent.getStringExtra(EXTRA_VIEW_TYPE) != VIEW_TYPE_FRONT
         setContentView(if (isBackView) R.layout.activity_take_records_back else R.layout.activity_take_records_front)
 
-        val uniqueId = intent.getStringExtra("UNIQUE_ID")
         setupToolbar()
         setupButtons()
         createButtonGrid()
 
-        fetchButtonColors(uniqueId) { states ->
-            states?.let {
-                runOnUiThread {
-                    buttonStates.clear()
-                    buttonStates.addAll(it)
-                    updateAllButtonColors()
+        if (AppConfig.online) {
+            val uniqueId = intent.getStringExtra("UNIQUE_ID")
+            fetchButtonColors(uniqueId) { states ->
+                states?.let {
+                    runOnUiThread {
+                        buttonStates.clear()
+                        buttonStates.addAll(it)
+                        updateAllButtonColors()
+                    }
                 }
             }
+        } else {
+            // In offline mode, just update colors from existing buttonStates
+            updateAllButtonColors()
         }
     }
 
@@ -246,3 +265,5 @@ class TakeRecordsActivity : AppCompatActivity() {
         })
     }
 }
+
+

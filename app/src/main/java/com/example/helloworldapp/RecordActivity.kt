@@ -2,6 +2,7 @@ package com.example.helloworldapp
 
 import AppConfig
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioFormat
@@ -51,7 +52,7 @@ class RecordActivity : ComponentActivity() {
     private val activeRequests = AtomicInteger(0)
     private var recording_result = "fail"
     private var recordingId = "0"
-
+    private var recordingModeStr = "offline"
     private var stopRecordingCallback: (String, String) -> Unit = { _, _ -> }
 
 
@@ -59,7 +60,13 @@ class RecordActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_record)
         buttonNumber = intent.getStringExtra("button_number") ?: "0"
+        recordId = intent.getStringExtra("UNIQUE_ID") ?: "000000"
+        if (AppConfig.online) {
+            recordingModeStr = "online"
+        }
         findViewById<TextView>(R.id.buttonNumberText).text = "Recording point ${buttonNumber}"
+        findViewById<TextView>(R.id.recordModeText).text = "App in ${recordingModeStr} mode. Record ID ${recordId}"
+
 
         // Request permissions if they have not been granted yet
         if (ContextCompat.checkSelfPermission(
@@ -81,9 +88,13 @@ class RecordActivity : ComponentActivity() {
 
         // Set up the cancel button click listener
         findViewById<Button>(R.id.cancelButton).setOnClickListener {
+            Log.d("RecordActivity", "Cancel button pressed")
+            recording_result = "abort"
+            setResult(Activity.RESULT_CANCELED)
             stopRecording("abort", "0")
         }
     }
+
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -171,11 +182,13 @@ class RecordActivity : ComponentActivity() {
                     }
                 }
 
-                val wavData = WavConverter.pcmToWav(fullRecordingData.toByteArray(), sampleRate, 1, 16)
-                fullRecordingData.close()
-                saveAudioDataLocally(wavData)
-                recording_result = "success"
-                stopRecording(recording_result, buttonNumber)
+                if (isRecording) {
+                    val wavData = WavConverter.pcmToWav(fullRecordingData.toByteArray(), sampleRate, 1, 16)
+                    fullRecordingData.close()
+                    saveAudioDataLocally(wavData)
+                    recording_result = "success"
+                    stopRecording(recording_result, buttonNumber)
+                }
             }
 
             sendSaveCommandToServer(recording_result, buttonNumber)
@@ -306,6 +319,7 @@ class RecordActivity : ComponentActivity() {
     }
 
     private fun stopRecording(result: String, buttonNumber: String) {
+        Log.d("RecordActivity", "Stopping recording - recording_result: $result")
         recording_result = result
         isRecording = false // This will cause the loop in startRecording() to end
 
@@ -323,18 +337,36 @@ class RecordActivity : ComponentActivity() {
         mediaPlayer.start()
     }
 
-    private fun sendResult(recording_result: String, buttonNumber: String) {
-        var result_to_return = "0"
-        var result_code = RESULT_CANCELED
-        if (recording_result == "success") {
-            result_to_return = buttonNumber
-            result_code = RESULT_OK
-        }
-        val data = Intent().apply {
-            putExtra("button_number", result_to_return)
-        }
+//    private fun sendResult(recording_result: String, buttonNumber: String) {
+//        var result_to_return = "0"
+//        var result_code = RESULT_CANCELED
+//        if (recording_result == "success") {
+//            result_to_return = buttonNumber
+//            result_code = RESULT_OK
+//        }
+//        val data = Intent().apply {
+//            putExtra("button_number", result_to_return)
+//        }
+//        setResult(result_code, data)
+//    }
 
-        setResult(result_code, data)
+
+    private fun sendResult(recording_result: String, buttonNumber: String) {
+        // Add logging
+        Log.d("RecordActivity", "Sending result - recording_result: $recording_result")
+        Log.d("RecordActivity", "RESULT_CANCELED value: ${Activity.RESULT_CANCELED}")  // Should be 0
+        Log.d("RecordActivity", "RESULT_OK value: ${Activity.RESULT_OK}")  // Should be -1
+
+        if (recording_result == "success") {
+            val data = Intent().apply {
+                putExtra("button_number", buttonNumber)
+            }
+            Log.d("RecordActivity", "Setting RESULT_OK with button: $buttonNumber")
+            setResult(Activity.RESULT_OK, data)
+        } else {
+            Log.d("RecordActivity", "Setting RESULT_CANCELED")
+            setResult(Activity.RESULT_CANCELED)
+        }
     }
 }
 

@@ -141,17 +141,23 @@ class MainActivity : AppCompatActivity() {
             "model" to Build.MODEL,
             "manufacturer" to Build.MANUFACTURER
         )
-        val requestBody = Gson().toJson(deviceInfo).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-
-        val request = Request.Builder()
-            .url("${AppConfig.serverIP}/getUniqueId?numChunks=$numChunks")
-            .post(requestBody)
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            if (response.isSuccessful) {
-                response.body?.string()
-            } else null
+        if (AppConfig.online) {
+            val requestBody = Gson().toJson(deviceInfo)
+                .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+            val request = Request.Builder()
+                .url("${AppConfig.serverIP}/getUniqueId?numChunks=$numChunks")
+                .post(requestBody)
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    response.body?.string()
+                } else null
+            }
+        } else {
+            val timestamp = System.currentTimeMillis()
+            val random = (0..999999).random().toString().padStart(6, '0')
+            val deviceHash = (Build.MODEL + Build.MANUFACTURER).hashCode().toString().takeLast(4)
+            "OFF${timestamp}${deviceHash}${random}"
         }
     }
 }
