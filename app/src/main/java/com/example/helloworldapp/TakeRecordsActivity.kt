@@ -6,6 +6,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.widget.Button
 import android.widget.GridLayout
 import android.widget.ImageButton
@@ -13,6 +14,9 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import com.example.helloworldapp.data.RecordManager
+import com.example.helloworldapp.data.PointRecord  // if you need the class directly
+import com.example.helloworldapp.data.RecordLabel  // if you need the enum
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -21,55 +25,43 @@ import okhttp3.Response
 import org.json.JSONArray
 import java.io.IOException
 
+
+
 class TakeRecordsActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_VIEW_TYPE = "view_type"
         const val VIEW_TYPE_BACK = "back"
         const val VIEW_TYPE_FRONT = "front"
         private val buttonStates = mutableListOf<Boolean>().apply { addAll(List(10) { false }) } // Make it static
-        private var currentUniqueId: String? = null // Track current UniqueID
     }
 
     private lateinit var buttonGrid: GridLayout
     private var isBackView: Boolean = true
 
     private val getResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        Log.d("TakeRecordsActivity", "============ START RESULT CALLBACK ============")
+        Log.d("TakeRecordsActivity", "Result code: ${result.resultCode}")
+        Log.d("TakeRecordsActivity", "Data: ${result.data?.extras}")
 
         if (result.resultCode == Activity.RESULT_OK) {
             val buttonNumber = result.data?.getStringExtra("button_number")?.toIntOrNull()
-            buttonNumber?.let {
-                if (it in 1..buttonStates.size) {
-                    buttonStates[it - 1] = true
-                    updateButtonColor(it - 1)
-                }
-            }
+            val recordId = intent.getStringExtra("UNIQUE_ID")
 
-            if (AppConfig.online) {
-                val uniqueId = intent.getStringExtra("UNIQUE_ID")
-                fetchButtonColors(uniqueId) { states ->
-                    states?.let {
-                        runOnUiThread {
-                            buttonStates.clear()
-                            buttonStates.addAll(it)
-                            updateAllButtonColors()
-                        }
-                    }
-                }
+            Log.d("TakeRecordsActivity", "Button number: $buttonNumber")
+            Log.d("TakeRecordsActivity", "Record ID: $recordId")
+
+            if (buttonNumber != null && recordId != null) {
+                RecordManager.setRecorded(recordId, buttonNumber, true)
+                Log.d("TakeRecordsActivity", "Setting recorded for button $buttonNumber")
+
             }
         }
+        updateAllButtons()
+        Log.d("TakeRecordsActivity", "============ END RESULT CALLBACK ============")
     }
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val newUniqueId = intent.getStringExtra("UNIQUE_ID")
-        // Reset button states if UniqueID changes
-        if (currentUniqueId != newUniqueId) {
-            buttonStates.clear()
-            buttonStates.addAll(List(10) { false })
-            currentUniqueId = newUniqueId
-        }
 
         isBackView = intent.getStringExtra(EXTRA_VIEW_TYPE) != VIEW_TYPE_FRONT
         setContentView(if (isBackView) R.layout.activity_take_records_back else R.layout.activity_take_records_front)
@@ -77,22 +69,7 @@ class TakeRecordsActivity : AppCompatActivity() {
         setupToolbar()
         setupButtons()
         createButtonGrid()
-
-        if (AppConfig.online) {
-            val uniqueId = intent.getStringExtra("UNIQUE_ID")
-            fetchButtonColors(uniqueId) { states ->
-                states?.let {
-                    runOnUiThread {
-                        buttonStates.clear()
-                        buttonStates.addAll(it)
-                        updateAllButtonColors()
-                    }
-                }
-            }
-        } else {
-            // In offline mode, just update colors from existing buttonStates
-            updateAllButtonColors()
-        }
+        updateAllButtons()
     }
 
     private fun setupToolbar() {
@@ -147,6 +124,7 @@ class TakeRecordsActivity : AppCompatActivity() {
             text = number.toString()
             setBackgroundResource(R.drawable.round_button_background)
             setOnClickListener {
+                Log.e("TakeRecordsActivity", "Launching RecordActivity for button $number")  // Using Log.e
                 val intent = Intent(this@TakeRecordsActivity, RecordActivity::class.java).apply {
                     putExtra("button_number", number.toString())
                     putExtra("UNIQUE_ID", this@TakeRecordsActivity.intent.getStringExtra("UNIQUE_ID"))
@@ -155,23 +133,21 @@ class TakeRecordsActivity : AppCompatActivity() {
             }
         }
     }
+    private fun updateAllButtons() {
+        val recordId = intent.getStringExtra("UNIQUE_ID") ?: return
+        val buttonRange = if (isBackView) 5..10 else 1..4
 
-    private fun updateButtonColor(index: Int) {
-        val buttonIndex = if (isBackView) index - 5 else index
-        val button = buttonGrid.getChildAt(buttonIndex) as? Button
-        button?.setBackgroundResource(
-            if (buttonStates[index]) R.drawable.round_button_selected
-            else R.drawable.round_button_background
-        )
-    }
+        Log.d("TakeRecordsActivity", "Updating buttons for record: $recordId")
 
-    private fun updateAllButtonColors() {
-        val range = if (isBackView) 5..10 else 1..4
-        for (i in range) {
-            updateButtonColor(i - 1)
-        }
-        if (buttonStates.all { it }) {
-            showConfirmationDialog()
+        for (i in buttonRange) {
+            val button = buttonGrid.getChildAt(i - (if (isBackView) 5 else 1)) as? Button
+            val record = RecordManager.getPointRecord(recordId, i)
+
+            record?.let { pointRecord ->
+                val colorRes = RecordManager.getButtonColor(pointRecord)
+                Log.d("TakeRecordsActivity", "Setting button $i color to resource: $colorRes")
+                button?.setBackgroundResource(colorRes)
+            }
         }
     }
 
@@ -192,7 +168,7 @@ class TakeRecordsActivity : AppCompatActivity() {
 
         dialogView.findViewById<Button>(R.id.btnExitWithoutSaving).setOnClickListener {
             dialog.dismiss()
-            sendDeleteCommand(intent.getStringExtra("UNIQUE_ID"), this)
+            RecordManager.deleteRecording(intent.getStringExtra("UNIQUE_ID"))
             startActivity(Intent(this, MainActivity::class.java))
             finish()
         }
@@ -200,70 +176,19 @@ class TakeRecordsActivity : AppCompatActivity() {
         dialogView.findViewById<Button>(R.id.btnCancel).setOnClickListener {
             dialog.dismiss()
         }
-
         dialog.show()
     }
 
     override fun onBackPressed() {
         showConfirmationDialog()
     }
-
-    private fun sendDeleteCommand(uniqueId: String?, context: Context) {
-        val url = "${AppConfig.serverIP}/record_delete?record_id=${uniqueId}"
-
-        val request = Request.Builder()
-            .url(url)
-            .get()
-            .build()
-
-        OkHttpClient().newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                runOnUiThread {
-                    Toast.makeText(context, "Error deleting record", Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                runOnUiThread {
-                    if (response.isSuccessful) {
-                        Toast.makeText(context, "Record deleted successfully", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(context, "Failed to delete record: ${response.message}", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        })
-    }
-
-    private fun fetchButtonColors(recordId: String?, callback: (List<Boolean>?) -> Unit) {
-        val client = OkHttpClient()
-        val request = Request.Builder()
-            .url("${AppConfig.serverIP}/get_button_states?record_id=$recordId")
-            .build()
-
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                e.printStackTrace()
-                callback(null)
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use { res ->
-                    if (res.isSuccessful) {
-                        val jsonData = res.body?.string()
-                        val jsonArray = JSONArray(jsonData)
-                        val buttonColors = mutableListOf<Boolean>()
-                        for (i in 0 until jsonArray.length()) {
-                            buttonColors.add(jsonArray.getBoolean(i))
-                        }
-                        callback(buttonColors)
-                    } else {
-                        callback(null)
-                    }
-                }
-            }
-        })
-    }
 }
+
+
+
+
+
+
+
 
 

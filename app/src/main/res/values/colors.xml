@@ -8,9 +8,14 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <color name="colorNoLabel">#D3D3D3</color> <!-- Example gray for no label -->
-    <color name="colorNormal">#758775</color> <!-- Green for labeled -->
-    <color name="colorProblems">#8E5858</color> <!-- Red for verified -->
-
     <color name="colorPrimary">#6200EE</color>
+
+
+    <color name="colorNotRecorded">#A792CC</color>
+    <color name="colorRecorded">#AF44C0</color>
+    <color name="colorPositive">#D06F90</color>
+    <color name="colorNegative">#74CF71</color>
+    <color name="colorUndetermined">#CCC26C</color>
+
+
 </resources>

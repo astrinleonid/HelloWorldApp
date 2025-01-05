@@ -3,7 +3,6 @@ package com.example.helloworldapp
 import AppConfig
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.media.MediaPlayer
 import android.os.Bundle
 import android.util.Log
@@ -17,13 +16,12 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.google.gson.Gson
+import com.example.helloworldapp.data.RecordLabel
+import com.example.helloworldapp.data.RecordManager
 import okhttp3.Call
 import okhttp3.Callback
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody
 import okhttp3.Response
 import org.json.JSONObject
 import java.io.File
@@ -33,13 +31,11 @@ import java.net.URLEncoder
 class FileListAdapter(
     private val context: Context,
     private val fileList: MutableList<String>,
-    private val folderId: String,
+    private val recordId: String,  // renamed from folderId for consistency
     private val textViewStatus: TextView,
-    private val fileParameters: MutableMap<String, String>,
     private val onDeleteSuccess: () -> Unit
 ) : ArrayAdapter<String>(context, 0, fileList) {
     private var mediaPlayer: MediaPlayer? = null
-//    private val fileParameters = mutableMapOf<String, String>()  // Store file parameters
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
         var listItemView = convertView
@@ -53,79 +49,84 @@ class FileListAdapter(
         val buttonDelete = listItemView?.findViewById<Button>(R.id.buttonDelete)
         val buttonLabel = listItemView?.findViewById<Button>(R.id.buttonLabel)
 
-        val pointNumber = fileName?.substringAfterLast("point")?.toIntOrNull() ?: 0
+        // Extract point number from filename
+        val pointNumber = if (AppConfig.online) {
+            fileName?.substringAfterLast("point")?.toIntOrNull() ?: 0
+        } else {
+            fileName?.substringAfter("btn_")?.substringBefore("_")?.toIntOrNull() ?: 0
+        }
+
+        // Get point record from RecordManager
+        val record = RecordManager.getPointRecord(recordId, pointNumber)
 
         textViewFileName?.text = "Point $pointNumber"
-        if (buttonLabel != null) {
-            val initialLabel = fileParameters[fileName] ?: "No Label"
-            buttonLabel.text = initialLabel
-            setButtonColor(buttonLabel, initialLabel)
-        }
 
-        // buttonLabel?.text = "No Label"
-        buttonPlay?.setOnClickListener {
-            playFile(folderId, fileName ?: "")
-        }
-        buttonDelete?.setOnClickListener {
-            deleteFile(folderId, fileName ?: "")
-            notifyDataSetChanged()
-        }
-
+        // Set up label button
+        buttonLabel?.text = record?.label?.toString() ?: "NOLABEL"
         buttonLabel?.setOnClickListener {
-            fileName?.let { safeFileName ->
-                val currentLabel = fileParameters[safeFileName] ?: "No Label"
-                val newLabel = when (currentLabel) {
-                    "No Label" -> "Normal"
-                    "Normal" -> "Problems"
-                    else -> "No Label"
-                }
-                fileParameters[safeFileName] = newLabel
-
-                // Update button color based on the new label
-                val colorRes = when (newLabel) {
-                    "Normal" -> R.color.colorNormal
-                    "Problems" -> R.color.colorProblems
-                    else -> R.color.colorNoLabel
-                }
-                buttonLabel.setBackgroundColor(ContextCompat.getColor(context, colorRes))
-                sendFileParametersToServer(fileParameters)
-                notifyDataSetChanged()
-            }
+            cycleLabel(pointNumber)
         }
+
+        // Set label button color
+        buttonLabel?.let { button ->
+            val colorRes = when(record?.label) {
+                RecordLabel.POSITIVE -> R.color.colorPositive
+                RecordLabel.NEGATIVE -> R.color.colorNegative
+                RecordLabel.UNDETERMINED -> R.color.colorUndetermined
+                else -> R.color.colorRecorded  // or whatever color you want for NOLABEL
+            }
+            button.setBackgroundColor(ContextCompat.getColor(context, colorRes))
+        }
+
+        buttonPlay?.setOnClickListener {
+            playFile(recordId, fileName ?: "")
+        }
+
+        buttonDelete?.setOnClickListener {
+            deleteRecording(pointNumber, fileName ?: "")
+        }
+
         return listItemView!!
     }
 
+    private fun cycleLabel(pointNumber: Int) {
+        val currentLabel = RecordManager.getPointRecord(recordId, pointNumber)?.label ?: RecordLabel.NOLABEL
+        val newLabel = when(currentLabel) {
+            RecordLabel.NOLABEL -> RecordLabel.POSITIVE
+            RecordLabel.POSITIVE -> RecordLabel.NEGATIVE
+            RecordLabel.NEGATIVE -> RecordLabel.UNDETERMINED
+            RecordLabel.UNDETERMINED -> RecordLabel.NOLABEL
+        }
+        RecordManager.setLabel(recordId, pointNumber, newLabel)
+        notifyDataSetChanged()
+    }
+
+    private fun deleteRecording(pointNumber: Int, fileName: String) {
+        // Delete the file
+        if (AppConfig.online) {
+            deleteFileFromServer(recordId, fileName)
+        } else {
+            deleteFileLocally(fileName)
+        }
+
+        // Reset the record state in RecordManager
+        RecordManager.setRecorded(recordId, pointNumber, false)
+        RecordManager.setLabel(recordId, pointNumber, RecordLabel.NOLABEL)
+
+        fileList.remove(fileName)
+        notifyDataSetChanged()
+        onDeleteSuccess()
+    }
     private fun setButtonColor(button: Button, label: String) {
         val colorRes = when (label) {
-            "Normal" -> R.color.colorNormal
-            "Problems" -> R.color.colorProblems
-            else -> R.color.colorNoLabel
+            "Normal" -> R.color.colorNegative
+            "Problems" -> R.color.colorPositive
+            "Undetermined" -> R.color.colorUndetermined
+            else -> R.color.colorRecorded
         }
         button.setBackgroundColor(ContextCompat.getColor(context, colorRes))
     }
-    private fun sendFileParametersToServer(fileParameters: Map<String, String>) {
-        val json = Gson().toJson(fileParameters)
-        val body = RequestBody.create("application/json; charset=utf-8".toMediaTypeOrNull(), json)
-        val request = Request.Builder()
-            .url("${AppConfig.serverIP}/update_labels?folderId=$folderId")
-            .post(body)
-            .build()
 
-        OkHttpClient().newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e("FileListAdapter", "Failed to send file parameters", e)
-                // Optionally update UI thread with failure message
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                if (!response.isSuccessful) {
-                    Log.e("FileListAdapter", "Server error: ${response.message}")
-                } else {
-                    Log.i("FileListAdapter", "Parameters updated successfully")
-                }
-            }
-        })
-    }
 
     private fun playFile(folderId: String, fileName: String) {
         mediaPlayer?.release()
@@ -161,13 +162,6 @@ class FileListAdapter(
         }
     }
 
-    private fun deleteFile(folderId: String, fileName: String) {
-        if (AppConfig.online) {
-            deleteFileFromServer(folderId, fileName)
-        } else {
-            deleteFileLocally(fileName)
-        }
-    }
 
     private fun deleteFileLocally(fileName: String) {
         try {
@@ -225,14 +219,13 @@ class FileListAdapter(
 
 }
 
+
 class PlayRecordsActivity : AppCompatActivity() {
     private var mediaPlayer: MediaPlayer? = null
     private lateinit var listView: ListView
     private lateinit var textViewStatus: TextView
-    private var folderId = ""
-    val returnIntent = Intent()
-    private lateinit var buttonOK: Button
-    private val fileParameters = mutableMapOf<String, String>()
+    private var recordId = ""
+    private lateinit var okButton: Button  // Changed variable name to match Kotlin conventions
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -240,38 +233,23 @@ class PlayRecordsActivity : AppCompatActivity() {
 
         listView = findViewById(R.id.listView)
         textViewStatus = findViewById(R.id.textViewStatus)
-        folderId = intent.getStringExtra("UNIQUE_ID") ?: ""
+        okButton = findViewById<Button>(R.id.buttonOK)  // Specify the type explicitly
+        recordId = intent.getStringExtra("UNIQUE_ID") ?: ""
 
         if (AppConfig.online) {
-            fetchFileListFromServer(folderId) { fileList ->
-                runOnUiThread {
-                    setupListView(fileList)
-                }
-            }
+            fetchFileListFromServer()
         } else {
-            // Handle offline mode
-            val fileList = getLocalFiles(folderId)
-            setupListView(fileList)
+            setupListView(getLocalFiles())
         }
 
-        buttonOK = findViewById<Button>(R.id.buttonOK)
-        buttonOK.setOnClickListener {
+        okButton.setOnClickListener {
             mediaPlayer?.release()
-            returnIntent.putExtra("button_number", 0)
-            setResult(Activity.RESULT_OK, returnIntent)
+            setResult(Activity.RESULT_OK)
             finish()
         }
     }
-
-    private fun getLocalFiles(folderId: String): List<String> {
-        val files = filesDir.listFiles { file ->
-            file.name.startsWith("offline_audio") &&
-                    file.name.contains("rec_${folderId}")
-        }
-        return files?.map { it.name } ?: emptyList()
-    }
-    private fun fetchFileListFromServer(folderId: String, callback: (List<String>) -> Unit) {
-        val encodedFolderId = URLEncoder.encode(folderId, "UTF-8")
+    private fun fetchFileListFromServer() {
+        val encodedFolderId = URLEncoder.encode(recordId, "UTF-8")
         val url = "${AppConfig.serverIP}/get_wav_files?folderId=$encodedFolderId"
 
         val client = OkHttpClient()
@@ -282,7 +260,9 @@ class PlayRecordsActivity : AppCompatActivity() {
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 Log.e("FileListActivity", "Failed to fetch file list", e)
-                // Handle failure
+                runOnUiThread {
+                    setupListView(emptyList())
+                }
             }
 
             override fun onResponse(call: Call, response: Response) {
@@ -291,50 +271,52 @@ class PlayRecordsActivity : AppCompatActivity() {
                         val jsonData = it.body?.string() ?: "{}"
                         val jsonObject = JSONObject(jsonData)
                         val files = jsonObject.optString("files", "")
-                        val labels = jsonObject.optJSONObject("labels") ?: JSONObject()
-
                         val fileList = files.split(" ").filter { it.isNotEmpty() }
-                        fileList.forEach { fileName ->
-                            fileParameters[fileName] = labels.optString(fileName, "No Label")
+
+                        runOnUiThread {
+                            setupListView(fileList)
                         }
-                        callback(fileList)
                     } else {
                         Log.e("FileListActivity", "Server error: ${response.message}")
-                        // Handle server error
-                        callback(emptyList())
+                        runOnUiThread {
+                            setupListView(emptyList())
+                        }
                     }
                 }
             }
         })
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        mediaPlayer?.release()
+        setResult(Activity.RESULT_OK)
+        finish()
+    }
+    
+    private fun getLocalFiles(): List<String> {
+        return filesDir.listFiles { file ->
+            file.name.startsWith("offline_audio") &&
+                    file.name.contains("rec_$recordId")
+        }?.map { it.name } ?: emptyList()
+    }
+
     private fun setupListView(fileList: List<String>) {
-        val adapter = FileListAdapter(this, fileList.toMutableList(), folderId, textViewStatus, fileParameters) {
-            refreshFileList()
+        val adapter = FileListAdapter(
+            this,
+            fileList.toMutableList(),
+            recordId,
+            textViewStatus
+        ) {
+            if (AppConfig.online) {
+                fetchFileListFromServer()
+            } else {
+                setupListView(getLocalFiles())
+            }
         }
         listView.adapter = adapter
     }
 
-    private fun refreshFileList() {
-        fetchFileListFromServer(folderId) { updatedFileList ->
-            runOnUiThread {
-                (listView.adapter as FileListAdapter).clear()
-                (listView.adapter as FileListAdapter).addAll(updatedFileList)
-                (listView.adapter as FileListAdapter).notifyDataSetChanged()
-            }
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        mediaPlayer?.release()
-
-        if (callingActivity != null) {
-            returnIntent.putExtra("button_number", 0)
-            setResult(Activity.RESULT_OK, returnIntent)
-            finish()
-        }
-    }
 }
 
 

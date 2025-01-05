@@ -14,6 +14,10 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.example.helloworldapp.adapters.RecordsAdapter
+import com.example.helloworldapp.data.RecordManager
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,17 +32,20 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.IOException
 
-class MainActivity : AppCompatActivity() {
 
+
+class MainActivity : AppCompatActivity() {
+    private lateinit var recordsAdapter: RecordsAdapter
     private var serverErrorDialog: Boolean = false
     private var uniqueId: String? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         val toolbar: Toolbar = findViewById(R.id.top_app_bar)
         setSupportActionBar(toolbar)
+
+        setupRecordsList()  // Add this line
 
         val startButton: Button = findViewById(R.id.start_button)
         startButton.setOnClickListener {
@@ -48,10 +55,11 @@ class MainActivity : AppCompatActivity() {
                         uniqueId = fetchUniqueId(AppConfig.numChunks)
                         withContext(Dispatchers.Main) {
                             uniqueId?.let {
-                                val intent = Intent(this@MainActivity, TakeRecordsActivity::class.java)
+                                RecordManager.initializeRecord(it)
+                                val intent = Intent(this@MainActivity, TakeRecordsActivity::class.java)  // Use this@MainActivity
                                 intent.putExtra("UNIQUE_ID", it)
                                 intent.putExtra(TakeRecordsActivity.EXTRA_VIEW_TYPE, TakeRecordsActivity.VIEW_TYPE_FRONT)
-                                startActivity(intent)
+                                this@MainActivity.startActivity(intent)  // Use this@MainActivity
                             }
                         }
                     }
@@ -62,6 +70,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupRecordsList() {
+        val recyclerView: RecyclerView = findViewById(R.id.recordsList)
+        recyclerView.layoutManager = LinearLayoutManager(this)
+
+        recordsAdapter = RecordsAdapter(RecordManager.getAllRecordIds()) { recordId ->
+            // Handle clicking on a record
+            val intent = Intent(this, TakeRecordsActivity::class.java)
+            intent.putExtra("UNIQUE_ID", recordId)
+            intent.putExtra(TakeRecordsActivity.EXTRA_VIEW_TYPE, TakeRecordsActivity.VIEW_TYPE_FRONT)
+            startActivity(intent)
+        }
+        recyclerView.adapter = recordsAdapter
+    }
+
+    override fun onResume() {
+        super.onResume()
+        recordsAdapter.notifyDataSetChanged()
+    }
     // Inflate the menu
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.menu_main, menu)
@@ -161,3 +187,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+
+
+
+
+
