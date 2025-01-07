@@ -7,7 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import android.view.Gravity
+import android.view.View
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageButton
 import android.widget.Toast
@@ -45,13 +48,13 @@ class TakeRecordsActivity : AppCompatActivity() {
 
         if (result.resultCode == Activity.RESULT_OK) {
             val buttonNumber = result.data?.getStringExtra("button_number")?.toIntOrNull()
-            val recordId = intent.getStringExtra("UNIQUE_ID")
+            val recordingId = intent.getStringExtra("UNIQUE_ID")
 
             Log.d("TakeRecordsActivity", "Button number: $buttonNumber")
-            Log.d("TakeRecordsActivity", "Record ID: $recordId")
+            Log.d("TakeRecordsActivity", "Record ID: $recordingId")
 
-            if (buttonNumber != null && recordId != null) {
-                RecordManager.setRecorded(recordId, buttonNumber, true)
+            if (buttonNumber != null && recordingId != null) {
+                RecordManager.setPointRecorded(recordingId, buttonNumber)
                 Log.d("TakeRecordsActivity", "Setting recorded for button $buttonNumber")
 
             }
@@ -108,17 +111,41 @@ class TakeRecordsActivity : AppCompatActivity() {
         val buttonRange = if (isBackView) 5..10 else 1..4
 
         for (i in buttonRange) {
-            val button = createRoundButton(i)
-            val buttonMargin = resources.getDimensionPixelSize(R.dimen.point_button_margin)
-            val params = GridLayout.LayoutParams().apply {
-                width = resources.getDimensionPixelSize(R.dimen.grid_button_size)
-                height = resources.getDimensionPixelSize(R.dimen.grid_button_size)
-                // Set larger margins for better spacing
-                setMargins(buttonMargin, buttonMargin, buttonMargin, buttonMargin)
+            // Create container for the button and its overlay
+            val container = FrameLayout(this).apply {
+                val size = resources.getDimensionPixelSize(R.dimen.grid_button_size)
+                layoutParams = GridLayout.LayoutParams().apply {
+                    width = size
+                    height = size
+                    val margin = resources.getDimensionPixelSize(R.dimen.point_button_margin)
+                    setMargins(margin, margin, margin, margin)
+                }
             }
-            buttonGrid.addView(button, params)
+
+            // Add the main round button
+            val mainButton = createRoundButton(i)
+            container.addView(mainButton, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+
+            // Create and add overlay buttons (initially invisible)
+            val overlay = layoutInflater.inflate(R.layout.overlay_buttons, container, false).apply {
+                visibility = View.GONE
+                elevation = 10f  // Add elevation to ensure overlay is above the button
+                z = 10f         // Also set z-index
+            }
+            container.addView(overlay, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER  // Center the overlay in the container
+            })
+
+            buttonGrid.addView(container)
         }
     }
+
     private fun createRoundButton(number: Int): Button {
         return Button(this).apply {
             text = number.toString()
@@ -137,17 +164,10 @@ class TakeRecordsActivity : AppCompatActivity() {
         val recordId = intent.getStringExtra("UNIQUE_ID") ?: return
         val buttonRange = if (isBackView) 5..10 else 1..4
 
-        Log.d("TakeRecordsActivity", "Updating buttons for record: $recordId")
-
         for (i in buttonRange) {
-            val button = buttonGrid.getChildAt(i - (if (isBackView) 5 else 1)) as? Button
-            val record = RecordManager.getPointRecord(recordId, i)
+            val buttonIndex = if (isBackView) i - 5 else i - 1
 
-            record?.let { pointRecord ->
-                val colorRes = RecordManager.getButtonColor(pointRecord)
-                Log.d("TakeRecordsActivity", "Setting button $i color to resource: $colorRes")
-                button?.setBackgroundResource(colorRes)
-            }
+            updateButtonWithOverlay(recordId, buttonIndex)
         }
     }
 
@@ -168,9 +188,16 @@ class TakeRecordsActivity : AppCompatActivity() {
 
         dialogView.findViewById<Button>(R.id.btnExitWithoutSaving).setOnClickListener {
             dialog.dismiss()
-            RecordManager.deleteRecording(intent.getStringExtra("UNIQUE_ID"))
-            startActivity(Intent(this, MainActivity::class.java))
-            finish()
+            intent.getStringExtra("UNIQUE_ID")?.let { recordId ->
+                RecordManager.deleteRecording(recordId, this) { success ->
+                    if (success) {
+                        startActivity(Intent(this, MainActivity::class.java))
+                        finish()
+                    } else {
+                        Toast.makeText(this, "Error deleting recording", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
         }
 
         dialogView.findViewById<Button>(R.id.btnCancel).setOnClickListener {
@@ -179,10 +206,60 @@ class TakeRecordsActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun updateButtonWithOverlay(recordingId: String, pointNumber: Int) {
+        val container = buttonGrid.getChildAt(pointNumber) as? FrameLayout ?: return
+        val mainButton = container.getChildAt(0) as? Button
+        val overlay = container.getChildAt(1)
+        val record = RecordManager.getPointRecord(recordingId, pointNumber)
+
+        if (RecordManager.isRecorded(recordingId, pointNumber) == true) {
+            // Show overlay and set up buttons
+            overlay.visibility = View.VISIBLE
+
+            overlay.findViewById<Button>(R.id.playButton).setOnClickListener {
+                RecordManager.playPointRecording(recordingId, pointNumber, this) { status ->
+                    // Update status somewhere in UI
+                }
+            }
+
+            overlay.findViewById<Button>(R.id.labelButton).apply {
+                text = record?.label.toString().first().toString()
+                setOnClickListener {
+                    val newLabel = RecordManager.cyclePointLabel(recordingId, pointNumber)
+                    updateAllButtons()
+                }
+            }
+
+            overlay.findViewById<Button>(R.id.deleteButton).setOnClickListener {
+                RecordManager.resetPoint(recordingId, pointNumber, this) { success ->
+                    if (success) {
+                        updateAllButtons()
+                    } else {
+                        Toast.makeText(this, "Error resetting point", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        } else {
+            overlay.visibility = View.GONE
+        }
+
+        // Update main button color
+        val colorRes = record?.let { RecordManager.getButtonColor(it) }
+        if (colorRes != null) {
+            mainButton?.setBackgroundResource(colorRes)
+        }
+    }
+
+
     override fun onBackPressed() {
         showConfirmationDialog()
     }
 }
+
+
+
+
+
 
 
 

@@ -2,6 +2,8 @@
 package com.example.helloworldapp.data
 
 import AppConfig
+import android.content.Context
+import android.media.MediaPlayer
 import android.util.Log
 import com.example.helloworldapp.R
 import okhttp3.Call
@@ -9,88 +11,77 @@ import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import org.json.JSONArray
-import org.json.JSONObject
+import java.io.File
 import java.io.IOException
+import java.net.URLEncoder
 
 object RecordManager {
-    private val pointRecords = mutableMapOf<String, MutableMap<Int, PointRecord>>() // recordId -> (pointNumber -> record)
-    private var currentRecordId: String? = null
-    private val recordsList = mutableSetOf<String>()  // Store all record IDs
+    private val recordings = mutableMapOf<String, Recording>()
+    private var mediaPlayer: MediaPlayer? = null
 
-    fun initializeRecord(recordId: String, numPoints: Int = 10) {
-        currentRecordId = recordId
-        recordsList.add(recordId)  // Add to list of records
-        val recordMap = mutableMapOf<Int, PointRecord>()
-        for (i in 1..numPoints) {
-            recordMap[i] = PointRecord(i)
+    fun initializeRecording(id: String? = null): String {
+        // Generate ID if not provided
+        val recordingId = id ?: generateRecordingId()
+
+        // Create new recording
+        recordings[recordingId] = Recording(recordingId)
+
+        return recordingId
+    }
+
+    private fun generateRecordingId(): String {
+        if (AppConfig.online) {
+            // This case shouldn't happen as online ID should be provided
+            throw IllegalStateException("Online mode requires server-provided ID")
+        } else {
+            // Generate local ID using timestamp and random number
+            val timestamp = System.currentTimeMillis()
+            val random = (0..999999).random().toString().padStart(6, '0')
+            return "OFF${timestamp}${random}"
         }
-        pointRecords[recordId] = recordMap
     }
 
-    fun setRecorded(recordId: String, pointNumber: Int, isRecorded: Boolean) {
-        pointRecords[recordId]?.get(pointNumber)?.isRecorded = isRecorded
-    }
 
-    fun setLabel(recordId: String, pointNumber: Int, label: RecordLabel) {
-        pointRecords[recordId]?.get(pointNumber)?.label = label
-    }
+    fun getRecording(id: String): Recording? = recordings[id]
 
-    fun getPointRecord(recordId: String, pointNumber: Int): PointRecord? {
-        return pointRecords[recordId]?.get(pointNumber)
-    }
+    fun getAllRecordingIds(): List<String> = recordings.keys.toList()
 
-    fun getAllPointRecords(recordId: String): Map<Int, PointRecord>? {
-        return pointRecords[recordId]?.toMap()
-    }
-
-    fun syncWithServer(recordId: String, callback: (Boolean) -> Unit) {
-        if (!AppConfig.online) {
-            callback(true)
-            return
+    fun getFileName(recordingId: String, pointNumber: Int): String {
+        val fileName = "offline_audio_rec_${recordingId}_point_${pointNumber}_${System.currentTimeMillis()}.wav"
+        recordings[recordingId]?.points?.get(pointNumber)?.let { point ->
+            point.fileName = fileName
         }
+        return fileName
+    }
+    fun setPointRecorded(recordingId: String, pointNumber: Int) {
+        recordings[recordingId]?.points?.get(pointNumber)?.let { point ->
+            point.isRecorded = true
+        }
+    }
 
-        val client = OkHttpClient()
-        val request = Request.Builder()
-            .url("${AppConfig.serverIP}/get_wav_files?folderId=$recordId")
-            .build()
+    fun setPointLabel(recordingId: String, pointNumber: Int, label: RecordLabel) {
+        recordings[recordingId]?.points?.get(pointNumber)?.label = label
+    }
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                callback(false)
+
+    fun cyclePointLabel(recordingId: String, pointNumber: Int): RecordLabel? {
+        return recordings[recordingId]?.points?.get(pointNumber)?.let { point ->
+            val newLabel = when(point.label) {
+                RecordLabel.NOLABEL -> RecordLabel.POSITIVE
+                RecordLabel.POSITIVE -> RecordLabel.NEGATIVE
+                RecordLabel.NEGATIVE -> RecordLabel.UNDETERMINED
+                RecordLabel.UNDETERMINED -> RecordLabel.NOLABEL
             }
+            point.label = newLabel
+            newLabel
+        }
+    }
 
-            override fun onResponse(call: Call, response: Response) {
-                try {
-                    val jsonData = response.body?.string() ?: return
-                    val json = JSONObject(jsonData)
-                    val files = json.getString("files").split(" ")
-                    val labels = json.getJSONObject("labels")
-
-                    // Reset all records to not recorded
-                    pointRecords[recordId]?.values?.forEach { it.isRecorded = false }
-
-                    // Update recorded status and labels from server data
-                    files.forEach { filename ->
-                        val pointNumber = extractPointNumber(filename)
-                        if (pointNumber != null) {
-                            setRecorded(recordId, pointNumber, true)
-
-                            // Update label if exists
-                            val label = when(labels.optString(filename)) {
-                                "positive" -> RecordLabel.POSITIVE
-                                "negative" -> RecordLabel.NEGATIVE
-                                else -> RecordLabel.UNDETERMINED
-                            }
-                            setLabel(recordId, pointNumber, label)
-                        }
-                    }
-                    callback(true)
-                } catch (e: Exception) {
-                    callback(false)
-                }
-            }
-        })
+    fun isRecorded(recordingId: String, pointNumber: Int): Boolean {
+        return recordings[recordingId]?.points?.get(pointNumber)?.isRecorded ?: false
+    }
+    fun getPointRecord(recordingId: String, pointNumber: Int): PointRecord? {
+        return recordings[recordingId]?.points?.get(pointNumber)
     }
 
     private fun extractPointNumber(filename: String): Int? {
@@ -104,18 +95,6 @@ object RecordManager {
         }
     }
 
-    fun getAllRecordIds(): List<String> {
-        return recordsList.toList()
-    }
-    fun getRecordInfo(recordId: String): Map<String, Int> {
-        val record = pointRecords[recordId]
-        return mapOf(
-            "totalPoints" to (record?.size ?: 0),
-            "completedPoints" to (record?.count { it.value.isRecorded } ?: 0)
-        )
-    }
-
-
     fun getButtonColor(record: PointRecord): Int {
         return when {
             !record.isRecorded -> R.drawable.button_not_recorded
@@ -125,19 +104,42 @@ object RecordManager {
             else -> R.drawable.button_recorded
         }
     }
-    fun deleteRecording(uniqueId: String?) {
-        if (AppConfig.online) {
-            deleteFromServer(uniqueId) { success, message ->
-                if (success) {
-                    // Clear the record from internal storage
-                    pointRecords.remove(uniqueId)
-                }
-                // You could log the message if needed
-                Log.d("RecordManager", message ?: "No message received")
+    fun deleteRecording(id: String, context: Context, onComplete: (Boolean) -> Unit) {
+        val recording = recordings[id] ?: return
+
+        // Count files that need to be deleted
+        val totalFiles = recording.points.values.count { it.fileName != null }
+        var deletedFiles = 0
+        var hasErrors = false
+
+        // If no files to delete, just remove the recording and complete
+        if (totalFiles == 0) {
+            recordings.remove(id)
+            onComplete(true)
+            return
+        }
+
+        // Delete each file associated with points
+        recording.points.values.forEach { point ->
+            point.fileName?.let { fileName ->
+                    try {
+                        val file = File(context.filesDir, fileName)
+                        if (file.exists()) {
+                            val success = file.delete()
+                            if (!success) hasErrors = true
+                        }
+                        deletedFiles++
+                    } catch (e: Exception) {
+                        hasErrors = true
+                        deletedFiles++
+                        Log.e("RecordManager", "Error deleting file", e)
+                    }
+
+                    if (deletedFiles == totalFiles) {
+                        recordings.remove(id)
+                        onComplete(!hasErrors)
+                    }
             }
-        } else {
-            // Handle offline deletion
-            pointRecords.remove(uniqueId)
         }
     }
 
@@ -163,35 +165,68 @@ object RecordManager {
         })
     }
 
-    private fun fetchButtonColorsFromServer(recordId: String?, callback: (List<Boolean>?) -> Unit) {
-        val client = OkHttpClient()
-        val request = Request.Builder()
-            .url("${AppConfig.serverIP}/get_button_states?record_id=$recordId")
-            .build()
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                e.printStackTrace()
-                callback(null)
-            }
 
-            override fun onResponse(call: Call, response: Response) {
-                response.use { res ->
-                    if (res.isSuccessful) {
-                        val jsonData = res.body?.string()
-                        val jsonArray = JSONArray(jsonData)
-                        val buttonColors = mutableListOf<Boolean>()
-                        for (i in 0 until jsonArray.length()) {
-                            buttonColors.add(jsonArray.getBoolean(i))
-                        }
-                        callback(buttonColors)
-                    } else {
-                        callback(null)
-                    }
+    fun playPointRecording(recordingId: String, pointNumber: Int, context: Context, onStatusUpdate: (String) -> Unit) {
+        val point = recordings[recordingId]?.points?.get(pointNumber) ?: return
+        val fileName = point.fileName ?: return
+
+        mediaPlayer?.release()
+        mediaPlayer = MediaPlayer().apply {
+            try {
+                if (AppConfig.online) {
+                    val encodedRecordingId = URLEncoder.encode(recordingId, "UTF-8")
+                    val encodedFileName = URLEncoder.encode(fileName, "UTF-8")
+                    val url = "${AppConfig.serverIP}/file_download?fileName=$encodedFileName&folderId=$encodedRecordingId"
+                    setDataSource(url)
+                } else {
+                    val file = File(context.filesDir, fileName)
+                    setDataSource(file.absolutePath)
                 }
+
+            } catch (e: Exception) {
+                Log.e("RecordManager", "Error playing recording", e)
+                onStatusUpdate("Error playing recording")
             }
-        })
+        }
     }
 
+    fun resetPoint(recordingId: String, pointNumber: Int, context: Context, onComplete: (Boolean) -> Unit) {
+        recordings[recordingId]?.points?.get(pointNumber)?.let { point ->
+            val fileName = point.fileName
 
+            // Reset point data
+            point.isRecorded = false
+            point.label = RecordLabel.NOLABEL
+
+            // Delete the associated file if it exists
+            if (fileName != null) {
+                try {
+                    val file = File(context.filesDir, fileName)
+                    if (file.exists()) {
+                        val success = file.delete()
+                        point.fileName = null
+                        onComplete(success)
+                    } else {
+                        onComplete(true)  // File didn't exist, consider it successful
+                    }
+                } catch (e: Exception) {
+                    Log.e("RecordManager", "Error deleting file", e)
+                    onComplete(false)
+                }
+            } else {
+                onComplete(true)  // No file to delete
+            }
+        } ?: onComplete(false)  // Point not found
+    }
+
+    fun releaseMediaPlayer() {
+        mediaPlayer?.release()
+        mediaPlayer = null
+    }
 }
+
+
+
+
+

@@ -10,13 +10,12 @@ import com.example.helloworldapp.R
 import com.example.helloworldapp.data.RecordManager
 
 class RecordsAdapter(
-    private val records: List<String>,
-    private val onClick: (String) -> Unit
+private val records: List<String>,
+private val onClick: (String) -> Unit
 ) : RecyclerView.Adapter<RecordsAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val recordId: TextView = view.findViewById(R.id.recordId)
-        val summary: TextView = view.findViewById(R.id.recordSummary)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -27,11 +26,7 @@ class RecordsAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val recordId = records[position]
-        holder.recordId.text = "Record ID: $recordId"
-
-        val info = RecordManager.getRecordInfo(recordId)
-        holder.summary.text = "Completed points: ${info["completedPoints"]}/${info["totalPoints"]}"
-
+        holder.recordId.text = recordId
         holder.itemView.setOnClickListener { onClick(recordId) }
     }
 

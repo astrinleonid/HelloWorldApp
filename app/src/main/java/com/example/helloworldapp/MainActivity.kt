@@ -52,19 +52,26 @@ class MainActivity : AppCompatActivity() {
             checkServerResponse { isSuccessful ->
                 if (isSuccessful) {
                     CoroutineScope(Dispatchers.IO).launch {
+                        // Get ID from server in online mode
                         uniqueId = fetchUniqueId(AppConfig.numChunks)
                         withContext(Dispatchers.Main) {
-                            uniqueId?.let {
-                                RecordManager.initializeRecord(it)
-                                val intent = Intent(this@MainActivity, TakeRecordsActivity::class.java)  // Use this@MainActivity
-                                intent.putExtra("UNIQUE_ID", it)
+                            uniqueId?.let { id ->
+                                // Initialize with server-provided ID
+                                RecordManager.initializeRecording(id)
+                                val intent = Intent(this@MainActivity, TakeRecordsActivity::class.java)
+                                intent.putExtra("UNIQUE_ID", id)
                                 intent.putExtra(TakeRecordsActivity.EXTRA_VIEW_TYPE, TakeRecordsActivity.VIEW_TYPE_FRONT)
-                                this@MainActivity.startActivity(intent)  // Use this@MainActivity
+                                this@MainActivity.startActivity(intent)
                             }
                         }
                     }
                 } else {
-                    showServerErrorDialog()
+                    // In offline mode or server error, generate ID locally
+                    val newId = RecordManager.initializeRecording()
+                    val intent = Intent(this@MainActivity, TakeRecordsActivity::class.java)
+                    intent.putExtra("UNIQUE_ID", newId)
+                    intent.putExtra(TakeRecordsActivity.EXTRA_VIEW_TYPE, TakeRecordsActivity.VIEW_TYPE_FRONT)
+                    startActivity(intent)
                 }
             }
         }
@@ -74,7 +81,7 @@ class MainActivity : AppCompatActivity() {
         val recyclerView: RecyclerView = findViewById(R.id.recordsList)
         recyclerView.layoutManager = LinearLayoutManager(this)
 
-        recordsAdapter = RecordsAdapter(RecordManager.getAllRecordIds()) { recordId ->
+        recordsAdapter = RecordsAdapter(RecordManager.getAllRecordingIds()) { recordId ->
             // Handle clicking on a record
             val intent = Intent(this, TakeRecordsActivity::class.java)
             intent.putExtra("UNIQUE_ID", recordId)

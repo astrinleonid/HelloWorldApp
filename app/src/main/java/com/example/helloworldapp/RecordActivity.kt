@@ -16,6 +16,7 @@ import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.example.helloworldapp.data.RecordManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -45,13 +46,13 @@ class RecordActivity : ComponentActivity() {
     private var audioRecord: AudioRecord? = null
     private val recordingScope = CoroutineScope(Dispatchers.IO + Job())
     //private var result = "0"
-    private var recordId = "111111"
+    private var recordingId = "111111"
     private var buttonNumber = "0"
     private var isRecording = false
     private var buttonRecordingsNumber = 0
     private val activeRequests = AtomicInteger(0)
     private var recording_result = "fail"
-    private var recordingId = "0"
+    private var recordingOnServerId = "0"
     private var recordingModeStr = "offline"
     private var stopRecordingCallback: (String, String) -> Unit = { _, _ -> }
 
@@ -60,12 +61,12 @@ class RecordActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_record)
         buttonNumber = intent.getStringExtra("button_number") ?: "0"
-        recordId = intent.getStringExtra("UNIQUE_ID") ?: "000000"
+        recordingId = intent.getStringExtra("UNIQUE_ID") ?: "000000"
         if (AppConfig.online) {
             recordingModeStr = "online"
         }
         findViewById<TextView>(R.id.buttonNumberText).text = "Recording point ${buttonNumber}"
-        findViewById<TextView>(R.id.recordModeText).text = "App in ${recordingModeStr} mode. Record ID ${recordId}"
+        findViewById<TextView>(R.id.recordModeText).text = "App in ${recordingModeStr} mode. Record ID ${recordingId}"
 
 
         // Request permissions if they have not been granted yet
@@ -82,7 +83,7 @@ class RecordActivity : ComponentActivity() {
         } else {
             // Permissions already granted, start recording
             buttonNumber = intent.getStringExtra("button_number") ?: "0"
-            recordId = intent.getStringExtra("UNIQUE_ID") ?: "000000"
+            recordingId = intent.getStringExtra("UNIQUE_ID") ?: "000000"
             startRecording()
         }
 
@@ -214,7 +215,7 @@ class RecordActivity : ComponentActivity() {
     private fun getRecordingId() {
         val client = OkHttpClient()
         val request = Request.Builder()
-            .url("${AppConfig.serverIP}/start_point_recording?record_id=$recordId")
+            .url("${AppConfig.serverIP}/start_point_recording?record_id=$recordingId")
             .build()
 
         client.newCall(request).enqueue(object : Callback {
@@ -228,7 +229,7 @@ class RecordActivity : ComponentActivity() {
                 if (response.isSuccessful) {
                     val jsonObject = JSONObject(responseBody)
                     val pointRecordId = jsonObject.getString("pointRecordId")
-                    recordingId = pointRecordId
+                    recordingOnServerId = pointRecordId
                     // Use the recordingId for further operations
                 } else {
                     val errorMessage = JSONObject(responseBody).getString("error")
@@ -248,8 +249,8 @@ class RecordActivity : ComponentActivity() {
                 audioData.toRequestBody("audio/3gp".toMediaTypeOrNull(), 0, audioData.size)
             )
             .addFormDataPart("button_number", buttonNumber)
-            .addFormDataPart("record_id", recordId)
-            .addFormDataPart("pointRecordId", recordingId)
+            .addFormDataPart("record_id", recordingId)
+            .addFormDataPart("pointRecordId", recordingOnServerId)
             .build()
 
         val request = Request.Builder()
@@ -296,7 +297,7 @@ class RecordActivity : ComponentActivity() {
             .setType(MultipartBody.FORM)
             .addFormDataPart("result", result)
             .addFormDataPart("button_number", buttonNumber)
-            .addFormDataPart("record_id", recordId)
+            .addFormDataPart("record_id", recordingId)
             .build()
 
         val request = Request.Builder()
@@ -313,7 +314,9 @@ class RecordActivity : ComponentActivity() {
     }
     private fun saveAudioDataLocally(audioData: ByteArray) {
         // Create a filename that includes button_number, record_id, and pointRecordId
-        val fileName = "offline_audio_btn_${buttonNumber}_rec_${recordId}_point_${recordingId}_${System.currentTimeMillis()}.wav"
+        //val fileName = "offline_audio_btn_${buttonNumber}_rec_${recordingId}_point_${recordingId}_${System.currentTimeMillis()}.wav"
+        val pointNumber = buttonNumber.toIntOrNull() ?: 0
+        val fileName = RecordManager.getFileName(recordingId, pointNumber)
         val file = File(filesDir, fileName)
         file.writeBytes(audioData)
     }
