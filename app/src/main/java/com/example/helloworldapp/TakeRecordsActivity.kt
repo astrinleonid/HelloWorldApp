@@ -1,9 +1,7 @@
 package com.example.helloworldapp
 
-import AppConfig
 import android.app.Activity
 import android.app.AlertDialog
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -18,15 +16,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import com.example.helloworldapp.data.RecordManager
-import com.example.helloworldapp.data.PointRecord  // if you need the class directly
-import com.example.helloworldapp.data.RecordLabel  // if you need the enum
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import org.json.JSONArray
-import java.io.IOException
 
 
 
@@ -165,8 +154,7 @@ class TakeRecordsActivity : AppCompatActivity() {
         val buttonRange = if (isBackView) 5..10 else 1..4
 
         for (i in buttonRange) {
-            val buttonIndex = if (isBackView) i - 5 else i - 1
-
+            val buttonIndex = if (isBackView) i - 4 else i
             updateButtonWithOverlay(recordId, buttonIndex)
         }
     }
@@ -213,6 +201,7 @@ class TakeRecordsActivity : AppCompatActivity() {
         val record = RecordManager.getPointRecord(recordingId, pointNumber)
 
         if (RecordManager.isRecorded(recordingId, pointNumber) == true) {
+
             // Show overlay and set up buttons
             overlay.visibility = View.VISIBLE
 
