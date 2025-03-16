@@ -1,9 +1,7 @@
 package com.example.helloworldapp.adapters
 
-import AppConfig
 import android.app.Activity
 import android.content.Context
-import android.media.MediaPlayer
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -18,12 +16,11 @@ import com.example.helloworldapp.data.RecordManager
 
 class FileListAdapter(
     private val context: Context,
-    private val fileList: MutableList<String>,
-    private val recordId: String,  // renamed from folderId for consistency
+    private val pointsList: MutableList<String>,
+    private val recordId: String,
     private val textViewStatus: TextView,
-    private val onDeleteSuccess: () -> Unit
-) : ArrayAdapter<String>(context, 0, fileList) {
-    private var mediaPlayer: MediaPlayer? = null
+    private val onRefresh: () -> Unit
+) : ArrayAdapter<String>(context, 0, pointsList) {
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
         var listItemView = convertView
@@ -31,59 +28,47 @@ class FileListAdapter(
             listItemView = LayoutInflater.from(context).inflate(R.layout.file_list_with_buttons, parent, false)
         }
 
-        val fileName = getItem(position)
+        val pointNumber = getItem(position)?.toIntOrNull() ?: return listItemView!!
+        val pointRecord = RecordManager.getPointRecord(recordId, pointNumber)
+
         val textViewFileName = listItemView?.findViewById<TextView>(R.id.textViewFileName)
         val buttonPlay = listItemView?.findViewById<Button>(R.id.buttonPlay)
         val buttonDelete = listItemView?.findViewById<Button>(R.id.buttonDelete)
         val buttonLabel = listItemView?.findViewById<Button>(R.id.buttonLabel)
 
-        // Extract point number from filename
-        val pointNumber = if (AppConfig.online) {
-            fileName?.substringAfterLast("point")?.toIntOrNull() ?: 0
-        } else {
-            fileName?.substringAfter("btn_")?.substringBefore("_")?.toIntOrNull() ?: 0
-        }
-
-        // Get point record from RecordManager
-        val record = RecordManager.getPointRecord(recordId, pointNumber)
-
         textViewFileName?.text = "Point $pointNumber"
 
         // Set up label button
-        buttonLabel?.text = record?.label?.toString() ?: "NOLABEL"
+        buttonLabel?.text = pointRecord?.label?.toString() ?: "NOLABEL"
         buttonLabel?.setOnClickListener {
-            val newLabel = RecordManager.cyclePointLabel(recordId, pointNumber)
+            RecordManager.cyclePointLabel(recordId, pointNumber)
             notifyDataSetChanged()
         }
 
         // Set label button color
         buttonLabel?.let { button ->
-            val colorRes = when(record?.label) {
+            val colorRes = when(pointRecord?.label) {
                 RecordLabel.POSITIVE -> R.color.colorPositive
                 RecordLabel.NEGATIVE -> R.color.colorNegative
                 RecordLabel.UNDETERMINED -> R.color.colorUndetermined
-                else -> R.color.colorRecorded  // or whatever color you want for NOLABEL
+                else -> R.color.colorRecorded
             }
             button.setBackgroundColor(ContextCompat.getColor(context, colorRes))
         }
 
+        // Set up play button
         buttonPlay?.setOnClickListener {
-            RecordManager.playPointRecording(recordId, pointNumber, context) { status ->
-                textViewStatus.text = status
-            }
+            RecordManager.playPointRecording(recordId, pointNumber, context)
         }
 
+        // Set up delete button
         buttonDelete?.setOnClickListener {
             RecordManager.resetPoint(recordId, pointNumber, context) { success ->
                 if (success) {
-                    // Run on UI thread since we're modifying UI elements
                     (context as Activity).runOnUiThread {
-                        // Remove the file from the list
-                        fileName?.let { name ->
-                            fileList.remove(name)
-                            notifyDataSetChanged()  // Update the ListView
-                            onDeleteSuccess()       // Call the callback to update parent activity if needed
-                        }
+                        pointsList.remove(pointNumber.toString())
+                        notifyDataSetChanged()
+                        onRefresh()
                     }
                 } else {
                     (context as Activity).runOnUiThread {
@@ -92,13 +77,10 @@ class FileListAdapter(
                 }
             }
         }
+
         return listItemView!!
     }
-
 }
-
-
-
 
 
 

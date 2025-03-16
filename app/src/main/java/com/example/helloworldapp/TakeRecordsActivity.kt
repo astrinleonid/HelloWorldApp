@@ -3,20 +3,23 @@ package com.example.helloworldapp
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
 import android.util.Log
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageButton
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import com.example.helloworldapp.data.RecordManager
-
 
 
 class TakeRecordsActivity : AppCompatActivity() {
@@ -28,7 +31,9 @@ class TakeRecordsActivity : AppCompatActivity() {
     }
 
     private lateinit var buttonGrid: GridLayout
-    private var isBackView: Boolean = true
+    private var isBackView: Boolean = false
+    private var buttonRange = 1..4
+    private var inGridInexCorrector = 1
 
     private val getResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         Log.d("TakeRecordsActivity", "============ START RESULT CALLBACK ============")
@@ -56,6 +61,11 @@ class TakeRecordsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         isBackView = intent.getStringExtra(EXTRA_VIEW_TYPE) != VIEW_TYPE_FRONT
+        if (isBackView)  {
+            buttonRange = 5..10
+            inGridInexCorrector = 5
+        }
+
         setContentView(if (isBackView) R.layout.activity_take_records_back else R.layout.activity_take_records_front)
 
         setupToolbar()
@@ -97,10 +107,11 @@ class TakeRecordsActivity : AppCompatActivity() {
 
     private fun createButtonGrid() {
         buttonGrid = findViewById(R.id.buttonGrid)
-        val buttonRange = if (isBackView) 5..10 else 1..4
+
 
         for (i in buttonRange) {
             // Create container for the button and its overlay
+
             val container = FrameLayout(this).apply {
                 val size = resources.getDimensionPixelSize(R.dimen.grid_button_size)
                 layoutParams = GridLayout.LayoutParams().apply {
@@ -118,18 +129,18 @@ class TakeRecordsActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             ))
 
+
             // Create and add overlay buttons (initially invisible)
-            val overlay = layoutInflater.inflate(R.layout.overlay_buttons, container, false).apply {
+
+            val overlay = layoutInflater.inflate(R.layout.overlay_icons, container, false).apply {
                 visibility = View.GONE
-                elevation = 10f  // Add elevation to ensure overlay is above the button
-                z = 10f         // Also set z-index
+                elevation = 10f
             }
             container.addView(overlay, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                gravity = Gravity.CENTER  // Center the overlay in the container
-            })
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+
 
             buttonGrid.addView(container)
         }
@@ -138,24 +149,56 @@ class TakeRecordsActivity : AppCompatActivity() {
     private fun createRoundButton(number: Int): Button {
         return Button(this).apply {
             text = number.toString()
+
+            // Make the text bold
+            setTypeface(typeface, Typeface.BOLD)
+
+            // Center the text
+            gravity = Gravity.CENTER
+
+            // Set background resource
             setBackgroundResource(R.drawable.round_button_background)
-            setOnClickListener {
-                Log.e("TakeRecordsActivity", "Launching RecordActivity for button $number")  // Using Log.e
-                val intent = Intent(this@TakeRecordsActivity, RecordActivity::class.java).apply {
-                    putExtra("button_number", number.toString())
-                    putExtra("UNIQUE_ID", this@TakeRecordsActivity.intent.getStringExtra("UNIQUE_ID"))
-                }
-                getResult.launch(intent)
+
+            // This will be set in onLayout to adjust to button size
+            post {
+                // Calculate font size based on button width (90% of width)
+                val fontSize = (width * 0.55).toFloat() // Using 45% of width rather than 90% to avoid overflow
+                setTextSize(TypedValue.COMPLEX_UNIT_PX, fontSize)
+            }
+
+            setTextColor(Color.WHITE)
+            alpha = 0.8f
+
+           setOnClickListener { handleButtonClick(number)
+
             }
         }
     }
+
+
+    private fun handleButtonClick(pointNumber: Int) {
+        val recordId = intent.getStringExtra("UNIQUE_ID")
+
+        // Check if this point already has a recording
+        if (recordId != null && RecordManager.isRecorded(recordId, pointNumber)) {
+            // Point already recorded - cycle through labels
+            RecordManager.cyclePointLabel(recordId, pointNumber)
+            updateAllButtons()
+        } else {
+            // Point not recorded yet - launch recording activity
+            Log.e("TakeRecordsActivity", "Launching RecordActivity for button $pointNumber")
+            val intent = Intent(this, RecordActivity::class.java).apply {
+                putExtra("button_number", pointNumber.toString())
+                putExtra("UNIQUE_ID", recordId)
+            }
+            getResult.launch(intent)
+        }
+    }
+
     private fun updateAllButtons() {
         val recordId = intent.getStringExtra("UNIQUE_ID") ?: return
-        val buttonRange = if (isBackView) 5..10 else 1..4
-
         for (i in buttonRange) {
-            val buttonIndex = if (isBackView) i - 4 else i
-            updateButtonWithOverlay(recordId, buttonIndex)
+            updateButtonWithOverlay(recordId, i)
         }
     }
 
@@ -195,31 +238,26 @@ class TakeRecordsActivity : AppCompatActivity() {
     }
 
     private fun updateButtonWithOverlay(recordingId: String, pointNumber: Int) {
-        val container = buttonGrid.getChildAt(pointNumber) as? FrameLayout ?: return
+        val container = buttonGrid.getChildAt(pointNumber - inGridInexCorrector) as? FrameLayout ?: return
         val mainButton = container.getChildAt(0) as? Button
         val overlay = container.getChildAt(1)
         val record = RecordManager.getPointRecord(recordingId, pointNumber)
+
+
+
 
         if (RecordManager.isRecorded(recordingId, pointNumber) == true) {
 
             // Show overlay and set up buttons
             overlay.visibility = View.VISIBLE
 
-            overlay.findViewById<Button>(R.id.playButton).setOnClickListener {
-                RecordManager.playPointRecording(recordingId, pointNumber, this) { status ->
-                    // Update status somewhere in UI
-                }
+// Set up play button
+            // Set up play button
+            overlay.findViewById<ImageButton>(R.id.playButton).setOnClickListener {
+                RecordManager.playPointRecording(recordingId, pointNumber, this)
             }
 
-            overlay.findViewById<Button>(R.id.labelButton).apply {
-                text = record?.label.toString().first().toString()
-                setOnClickListener {
-                    val newLabel = RecordManager.cyclePointLabel(recordingId, pointNumber)
-                    updateAllButtons()
-                }
-            }
-
-            overlay.findViewById<Button>(R.id.deleteButton).setOnClickListener {
+            overlay.findViewById<ImageButton>(R.id.deleteButton).setOnClickListener {
                 RecordManager.resetPoint(recordingId, pointNumber, this) { success ->
                     if (success) {
                         updateAllButtons()
@@ -228,14 +266,18 @@ class TakeRecordsActivity : AppCompatActivity() {
                     }
                 }
             }
+
         } else {
             overlay.visibility = View.GONE
         }
 
         // Update main button color
+
         val colorRes = record?.let { RecordManager.getButtonColor(it) }
         if (colorRes != null) {
             mainButton?.setBackgroundResource(colorRes)
+            val semiTransparentWhite = Color.argb(70, 255, 255, 255)  // 180/255 opacity white
+            mainButton?.setTextColor(semiTransparentWhite)
         }
     }
 
@@ -244,17 +286,5 @@ class TakeRecordsActivity : AppCompatActivity() {
         showConfirmationDialog()
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 

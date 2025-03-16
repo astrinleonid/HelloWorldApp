@@ -10,6 +10,7 @@ import android.widget.ListView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.example.helloworldapp.adapters.FileListAdapter
+import com.example.helloworldapp.data.RecordManager
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -20,14 +21,11 @@ import java.io.IOException
 import java.net.URLEncoder
 
 
-
-
 class PlayRecordsActivity : AppCompatActivity() {
-    private var mediaPlayer: MediaPlayer? = null
     private lateinit var listView: ListView
     private lateinit var textViewStatus: TextView
     private var recordId = ""
-    private lateinit var okButton: Button  // Changed variable name to match Kotlin conventions
+    private lateinit var okButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,98 +33,71 @@ class PlayRecordsActivity : AppCompatActivity() {
 
         listView = findViewById(R.id.listView)
         textViewStatus = findViewById(R.id.textViewStatus)
-        okButton = findViewById<Button>(R.id.buttonOK)  // Specify the type explicitly
+        okButton = findViewById(R.id.buttonOK)
         recordId = intent.getStringExtra("UNIQUE_ID") ?: ""
 
-        if (AppConfig.online) {
-            fetchFileListFromServer()
-        } else {
-            setupListView(getLocalFiles())
-        }
+        // Load recordings using RecordManager
+        loadRecordings()
 
         okButton.setOnClickListener {
-            mediaPlayer?.release()
+            RecordManager.releaseMediaPlayer()
             setResult(Activity.RESULT_OK)
             finish()
         }
     }
-    private fun fetchFileListFromServer() {
-        val encodedFolderId = URLEncoder.encode(recordId, "UTF-8")
-        val url = "${AppConfig.serverIP}/get_wav_files?folderId=$encodedFolderId"
 
-        val client = OkHttpClient()
-        val request = Request.Builder()
-            .url(url)
-            .build()
-
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e("FileListActivity", "Failed to fetch file list", e)
+    private fun loadRecordings() {
+        if (AppConfig.online) {
+            // Use RecordManager to sync with server first
+            RecordManager.syncWithServer(recordId) { success ->
                 runOnUiThread {
-                    setupListView(emptyList())
-                }
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (it.isSuccessful) {
-                        val jsonData = it.body?.string() ?: "{}"
-                        val jsonObject = JSONObject(jsonData)
-                        val files = jsonObject.optString("files", "")
-                        val fileList = files.split(" ").filter { it.isNotEmpty() }
-
-                        runOnUiThread {
-                            setupListView(fileList)
-                        }
+                    if (success) {
+                        displayRecordings()
                     } else {
-                        Log.e("FileListActivity", "Server error: ${response.message}")
-                        runOnUiThread {
-                            setupListView(emptyList())
-                        }
+                        textViewStatus.text = "Error loading recordings from server"
+                        setupListView(emptyList())
                     }
                 }
             }
-        })
+        } else {
+            // Just display any locally recorded points
+            displayRecordings()
+        }
+    }
+
+    private fun displayRecordings() {
+        // Get recorded points from RecordManager
+        val recordedPoints = RecordManager.getAllPointRecords(recordId)
+            ?.filter { it.value.isRecorded }
+            ?.map { it.key.toString() }
+            ?: emptyList()
+
+        if (recordedPoints.isEmpty()) {
+            textViewStatus.text = "No recordings found"
+        } else {
+            textViewStatus.text = "${recordedPoints.size} recordings available"
+        }
+
+        setupListView(recordedPoints)
+    }
+
+    private fun setupListView(recordedPoints: List<String>) {
+        val adapter = FileListAdapter(
+            this,
+            recordedPoints.toMutableList(),
+            recordId,
+            textViewStatus
+        ) {
+            // Reload after changes
+            loadRecordings()
+        }
+
+        listView.adapter = adapter
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        mediaPlayer?.release()
+        RecordManager.releaseMediaPlayer()
         setResult(Activity.RESULT_OK)
-        finish()
     }
-    
-    private fun getLocalFiles(): List<String> {
-        return filesDir.listFiles { file ->
-            file.name.startsWith("offline_audio") &&
-                    file.name.contains("rec_$recordId")
-        }?.map { it.name } ?: emptyList()
-    }
-
-    private fun setupListView(fileList: List<String>) {
-        val adapter = FileListAdapter(
-            this,
-            fileList.toMutableList(),
-            recordId,
-            textViewStatus
-        ) {
-            if (AppConfig.online) {
-                fetchFileListFromServer()
-            } else {
-                setupListView(getLocalFiles())
-            }
-        }
-        listView.adapter = adapter
-    }
-
 }
-
-
-
-
-
-
-
-
-
-

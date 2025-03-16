@@ -80,14 +80,17 @@ class MainActivity : AppCompatActivity() {
     private fun setupRecordsList() {
         val recyclerView: RecyclerView = findViewById(R.id.recordsList)
         recyclerView.layoutManager = LinearLayoutManager(this)
+        
 
         recordsAdapter = RecordsAdapter(RecordManager.getAllRecordingIds()) { recordId ->
             // Handle clicking on a record
-            val intent = Intent(this, TakeRecordsActivity::class.java)
+            val intent = Intent(this, PlayRecordsActivity::class.java)
             intent.putExtra("UNIQUE_ID", recordId)
-            intent.putExtra(TakeRecordsActivity.EXTRA_VIEW_TYPE, TakeRecordsActivity.VIEW_TYPE_FRONT)
             startActivity(intent)
         }
+
+
+
         recyclerView.adapter = recordsAdapter
     }
 
