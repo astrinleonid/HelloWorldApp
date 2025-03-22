@@ -2,23 +2,14 @@ package com.example.helloworldapp
 
 import AppConfig
 import android.app.Activity
-import android.media.MediaPlayer
 import android.os.Bundle
-import android.util.Log
 import android.widget.Button
 import android.widget.ListView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.example.helloworldapp.adapters.FileListAdapter
 import com.example.helloworldapp.data.RecordManager
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import org.json.JSONObject
-import java.io.IOException
-import java.net.URLEncoder
+import com.example.helloworldapp.utils.DialogUtils
 
 
 class PlayRecordsActivity : AppCompatActivity() {
@@ -40,9 +31,8 @@ class PlayRecordsActivity : AppCompatActivity() {
         loadRecordings()
 
         okButton.setOnClickListener {
-            RecordManager.releaseMediaPlayer()
-            setResult(Activity.RESULT_OK)
-            finish()
+            // Show confirmation dialog instead of simply finishing
+            DialogUtils.showSaveOptionsDialog(this, recordId)
         }
     }
 

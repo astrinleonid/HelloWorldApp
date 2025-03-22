@@ -80,7 +80,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupRecordsList() {
         val recyclerView: RecyclerView = findViewById(R.id.recordsList)
         recyclerView.layoutManager = LinearLayoutManager(this)
-        
+
 
         recordsAdapter = RecordsAdapter(RecordManager.getAllRecordingIds()) { recordId ->
             // Handle clicking on a record

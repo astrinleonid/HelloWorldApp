@@ -1,7 +1,6 @@
 package com.example.helloworldapp
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -14,12 +13,12 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageButton
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import com.example.helloworldapp.data.RecordManager
+import com.example.helloworldapp.utils.DialogUtils
 
 
 class TakeRecordsActivity : AppCompatActivity() {
@@ -203,39 +202,9 @@ class TakeRecordsActivity : AppCompatActivity() {
     }
 
     private fun showConfirmationDialog() {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_confirmation, null)
-        val dialog = AlertDialog.Builder(this)
-            .setView(dialogView)
-            .create()
-
-        dialogView.findViewById<Button>(R.id.btnSaveAndExit).setOnClickListener {
-            dialog.dismiss()
-            val intent = Intent(this, ShowQrActivity::class.java).apply {
-                putExtra("UNIQUE_ID", this@TakeRecordsActivity.intent.getStringExtra("UNIQUE_ID"))
-            }
-            startActivity(intent)
-            finish()
-        }
-
-        dialogView.findViewById<Button>(R.id.btnExitWithoutSaving).setOnClickListener {
-            dialog.dismiss()
-            intent.getStringExtra("UNIQUE_ID")?.let { recordId ->
-                RecordManager.deleteRecording(recordId, this) { success ->
-                    if (success) {
-                        startActivity(Intent(this, MainActivity::class.java))
-                        finish()
-                    } else {
-                        Toast.makeText(this, "Error deleting recording", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
-
-        dialogView.findViewById<Button>(R.id.btnCancel).setOnClickListener {
-            dialog.dismiss()
-        }
-        dialog.show()
+        DialogUtils.showSaveOptionsDialog(this, intent.getStringExtra("UNIQUE_ID"))
     }
+
 
     private fun updateButtonWithOverlay(recordingId: String, pointNumber: Int) {
         val container = buttonGrid.getChildAt(pointNumber - inGridInexCorrector) as? FrameLayout ?: return
@@ -251,7 +220,7 @@ class TakeRecordsActivity : AppCompatActivity() {
             // Show overlay and set up buttons
             overlay.visibility = View.VISIBLE
 
-// Set up play button
+
             // Set up play button
             overlay.findViewById<ImageButton>(R.id.playButton).setOnClickListener {
                 RecordManager.playPointRecording(recordingId, pointNumber, this)

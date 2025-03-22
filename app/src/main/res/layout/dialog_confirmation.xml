@@ -8,35 +8,35 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="Сохранить записи на сервере и выйти?" />
+        android:text="Save Recording"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp" />
 
-    <LinearLayout
+    <Button
+        android:id="@+id/btnSaveOnServer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:orientation="vertical"
-        android:gravity="center">
+        android:layout_marginBottom="8dp"
+        android:text="Save on Server" />
 
-        <Button
-            android:id="@+id/btnSaveAndExit"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:text="Сохранить и выйти" />
+    <Button
+        android:id="@+id/btnSaveLocally"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="Save Locally" />
 
-        <Button
-            android:id="@+id/btnExitWithoutSaving"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:text="Не сохранять" />
+    <Button
+        android:id="@+id/btnDeleteRecording"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="Delete Recording" />
 
-        <Button
-            android:id="@+id/btnCancel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Отмена" />
-
-    </LinearLayout>
+    <Button
+        android:id="@+id/btnCancel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Cancel" />
 </LinearLayout>
