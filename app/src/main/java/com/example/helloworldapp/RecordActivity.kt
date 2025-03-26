@@ -166,6 +166,7 @@ class RecordActivity : ComponentActivity() {
                         stopRecording(recording_result, buttonNumber)
                     }
                 }
+                sendSaveCommandToServer(recording_result, buttonNumber)
             } else {
                 // Offline mode - record one continuous piece
                 val fullRecordingData = ByteArrayOutputStream()
@@ -192,7 +193,7 @@ class RecordActivity : ComponentActivity() {
                 }
             }
 
-            sendSaveCommandToServer(recording_result, buttonNumber)
+
             audioRecord?.stop()
             audioRecord?.release()
             playSound(recording_result)
@@ -339,7 +340,7 @@ class RecordActivity : ComponentActivity() {
         mediaPlayer.setOnCompletionListener { mp -> mp.release() }
         mediaPlayer.start()
     }
-    
+
 
 
     private fun sendResult(recording_result: String, buttonNumber: String) {
