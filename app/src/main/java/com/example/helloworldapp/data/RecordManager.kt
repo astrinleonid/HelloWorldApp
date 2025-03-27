@@ -2,7 +2,6 @@
 package com.example.helloworldapp.data
 
 import AppConfig
-import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.media.MediaPlayer
@@ -27,7 +26,6 @@ import okhttp3.Response
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
-import java.net.URLEncoder
 
 object RecordManager {
     private val recordings = mutableMapOf<String, Recording>()
@@ -63,17 +61,7 @@ object RecordManager {
         return "OFF${timestamp}${deviceHash}${random}"
     }
 
-//    private fun generateRecordingId(): String {
-//        if (AppConfig.online) {
-//            // This case shouldn't happen as online ID should be provided
-//            throw IllegalStateException("Online mode requires server-provided ID")
-//        } else {
-//            // Generate local ID using timestamp and random number
-//            val timestamp = System.currentTimeMillis()
-//            val random = (0..999999).random().toString().padStart(6, '0')
-//            return "OFF${timestamp}${random}"
-//        }
-//    }
+
 
     suspend fun fetchUniqueId(numChunks: Int): String? = withContext(Dispatchers.IO) {
         val client = OkHttpClient()
@@ -265,6 +253,14 @@ object RecordManager {
         }
     }
 
+    fun setRemoteFileName(recordingId: String, pointNumber: Int, filename: String) {
+        recordings[recordingId]?.points?.get(pointNumber)?.let { point ->
+            point.fileName = filename
+            point.isRecorded = true
+            Log.d("RecordManager", "Set remote filename for recordingId=$recordingId, point=$pointNumber: $filename")
+        }
+    }
+
     private fun deleteFromServer(uniqueId: String?, callback: (Boolean, String?) -> Unit) {
         val url = "${AppConfig.serverIP}/record_delete?record_id=${uniqueId}"
         val request = Request.Builder()
@@ -304,106 +300,53 @@ object RecordManager {
     }
 
     fun playPointRecording(recordingId: String, pointNumber: Int, context: Context) {
-        val point = recordings[recordingId]?.points?.get(pointNumber) ?: return
-        val fileName = point.fileName ?: return
+        Log.d("RecordManager", "Starting playback for recordingId: $recordingId, point: $pointNumber, online: ${AppConfig.online}")
 
-        // Create dialog in a simpler way with better error handling
-        try {
-            // Run on UI thread
-            (context as? Activity)?.runOnUiThread {
-                // Create and show a simpler dialog
-                val builder = AlertDialog.Builder(context)
-                    .setTitle("Playing Recording")
-                    .setMessage("Playing point $pointNumber recording...")
-                    .setCancelable(false)
-                    .setPositiveButton("Stop") { dialog, _ ->
-                        stopPlayback()
-                        dialog.dismiss()
-                    }
-
-                playbackDialog = builder.create()
-                playbackDialog?.show()
-            }
-        } catch (e: Exception) {
-            Log.e("RecordManager", "Error creating dialog", e)
+        val point = recordings[recordingId]?.points?.get(pointNumber) ?: run {
+            Log.e("RecordManager", "Point not found: recordingId=$recordingId, pointNumber=$pointNumber")
+            Toast.makeText(context, "Recording point not found", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        // Setup media player
-        mediaPlayer?.release()
-        mediaPlayer = MediaPlayer().apply {
-            try {
-                if (AppConfig.online) {
-                    val encodedRecordingId = URLEncoder.encode(recordingId, "UTF-8")
-                    val encodedFileName = URLEncoder.encode(fileName, "UTF-8")
-                    val url = "${AppConfig.serverIP}/file_download?fileName=$encodedFileName&folderId=$encodedRecordingId"
-                    setDataSource(url)
-                } else {
-                    val file = File(context.filesDir, fileName)
-                    setDataSource(file.absolutePath)
-                }
+        val fileName = point.fileName ?: run {
+            Log.e("RecordManager", "Filename is null for point: recordingId=$recordingId, pointNumber=$pointNumber")
+            Toast.makeText(context, "No recording file found for this point", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-                prepareAsync()
+        Log.d("RecordManager", "Found filename: $fileName")
 
-                setOnPreparedListener {
-                    start()
-                    (context as? Activity)?.runOnUiThread {
-                        Toast.makeText(context, "Playing point $pointNumber", Toast.LENGTH_SHORT).show()
-                    }
-                }
+        // Create dialog and prepare for playback
+        val playbackManager = AudioPlaybackManager.getInstance()
+        playbackManager.createPlaybackDialog(context, pointNumber)
 
-                setOnCompletionListener {
-                    (context as? Activity)?.runOnUiThread {
-                        playbackDialog?.dismiss()
-                        playbackDialog = null
-                        Toast.makeText(context, "Playback completed", Toast.LENGTH_SHORT).show()
-                    }
-                    release()
-                    mediaPlayer = null
-                }
-
-                setOnErrorListener { mp, what, extra ->
-                    (context as? Activity)?.runOnUiThread {
-                        playbackDialog?.dismiss()
-                        playbackDialog = null
-                        Toast.makeText(context, "Error playing recording", Toast.LENGTH_SHORT).show()
-                    }
-                    release()
-                    mediaPlayer = null
-                    true
-                }
-            } catch (e: Exception) {
-                Log.e("RecordManager", "Error playing recording", e)
-                (context as? Activity)?.runOnUiThread {
-                    playbackDialog?.dismiss()
-                    playbackDialog = null
-                    Toast.makeText(context, "Error setting up playback", Toast.LENGTH_SHORT).show()
-                }
+        if (AppConfig.online) {
+            Log.d("RecordManager", "Playing ONLINE file, filename: $fileName")
+            // For online mode, just call AudioPlaybackManager with necessary info
+            playbackManager.prepareOnlinePlayback(context, recordingId, fileName, pointNumber)
+        } else {
+            Log.d("RecordManager", "Playing OFFLINE file, filename: $fileName")
+            // For offline mode, get the file path and pass to AudioPlaybackManager
+            val file = File(context.filesDir, fileName)
+            if (!file.exists()) {
+                Log.e("RecordManager", "File does not exist: ${file.absolutePath}")
+                playbackManager.dismissPlaybackDialog()
+                Toast.makeText(context, "Audio file not found", Toast.LENGTH_SHORT).show()
+                return
             }
+            playbackManager.playLocalFile(file.absolutePath, pointNumber)
         }
     }
 
+    fun stopPlayback() {
+        // Delegate to AudioPlaybackManager
+        AudioPlaybackManager.getInstance().stopPlayback()
+    }
 
-//    private fun updatePlaybackProgress(context: Context) {
-//        val handler = Handler(Looper.getMainLooper())
-//        val updateRunnable = object : Runnable {
-//            override fun run() {
-//                val player = mediaPlayer
-//                val dialog = playbackDialog
-//
-//                if (player != null && player.isPlaying && dialog != null && dialog.isShowing) {
-//                    val progressBar = dialog.findViewById<ProgressBar>(R.id.playbackProgress)
-//                    if (progressBar != null) {
-//                        progressBar.max = player.duration
-//                        progressBar.progress = player.currentPosition
-//                    }
-//                    handler.postDelayed(this, 100)
-//                }
-//            }
-//        }
-//
-//        handler.post(updateRunnable)
-//    }
-
+    fun releaseMediaPlayer() {
+        // Delegate to AudioPlaybackManager
+        AudioPlaybackManager.getInstance().releaseResources()
+    }
 
     // Dialog reference
     private var playbackDialog: AlertDialog? = null
@@ -468,24 +411,6 @@ object RecordManager {
         } ?: onComplete(false)  // Point not found, return failure
     }
 
-
-    // In RecordManager
-    fun stopPlayback() {
-        mediaPlayer?.apply {
-            if (isPlaying) {
-                stop()
-            }
-            reset()
-            release()
-        }
-        mediaPlayer = null
-
-
-    }
-    fun releaseMediaPlayer() {
-        mediaPlayer?.release()
-        mediaPlayer = null
-    }
 }
 
 

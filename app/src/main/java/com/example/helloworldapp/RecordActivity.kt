@@ -292,7 +292,6 @@ class RecordActivity : ComponentActivity() {
     }
 
     private fun sendSaveCommandToServer(result: String, buttonNumber: String) {
-
         val client = OkHttpClient()
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
@@ -306,11 +305,38 @@ class RecordActivity : ComponentActivity() {
             .post(requestBody)
             .build()
 
-        client.newCall(request).execute().use { response ->
-            if (response.isSuccessful) {
-                Log.e("RecordActivity", "Server success: ${response.message}")
-                response.body?.string()
-            } else null
+        try {
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val responseBody = response.body?.string()
+                    Log.d("RecordActivity", "Server success: ${response.message}, body: $responseBody")
+
+                    // Parse the JSON response to get the filename
+                    responseBody?.let {
+                        try {
+                            val jsonObject = JSONObject(it)
+                            val filename = jsonObject.optString("filename", null)
+
+                            if (!filename.isNullOrEmpty()) {
+                                Log.d("RecordActivity", "Received filename from server: $filename")
+
+                                // Store the filename in RecordManager
+                                val pointNumber = buttonNumber.toIntOrNull() ?: 0
+                                RecordManager.setRemoteFileName(recordingId, pointNumber, filename)
+                                RecordManager.setPointRecorded(recordingId, pointNumber)
+                            } else {
+                                Log.e("RecordActivity", "No filename received from server")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("RecordActivity", "Error parsing server response", e)
+                        }
+                    }
+                } else {
+                    Log.e("RecordActivity", "Server error: ${response.message}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("RecordActivity", "Error sending save command to server", e)
         }
     }
     private fun saveAudioDataLocally(audioData: ByteArray) {
