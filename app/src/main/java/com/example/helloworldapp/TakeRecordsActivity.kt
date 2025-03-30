@@ -1,6 +1,10 @@
 package com.example.helloworldapp
 
+import NetworkQualityChecker
 import android.app.Activity
+import android.app.AlertDialog
+import android.app.ProgressDialog
+import android.app.ProgressDialog.show
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -15,6 +19,8 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageButton
+import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -32,6 +38,8 @@ class TakeRecordsActivity : AppCompatActivity() {
         private val buttonStates = mutableListOf<Boolean>().apply { addAll(List(10) { false }) } // Make it static
     }
 
+    private var networkQualityChecker: NetworkQualityChecker? = null
+    private var connectionQualityChecked = false
     private lateinit var buttonGrid: GridLayout
     private var isBackView: Boolean = false
     private var buttonRange = 1..4
@@ -68,6 +76,7 @@ class TakeRecordsActivity : AppCompatActivity() {
             inGridInexCorrector = 5
         }
 
+        networkQualityChecker = NetworkQualityChecker(this)
         setContentView(if (isBackView) R.layout.activity_take_records_back else R.layout.activity_take_records_front)
 
         setupToolbar()
@@ -76,16 +85,58 @@ class TakeRecordsActivity : AppCompatActivity() {
         updateAllButtons()
     }
 
+    private fun checkServerConnectionQuality() {
+        // Show a progress dialog while checking
+        val progressDialog = ProgressDialog(this).apply {
+            setMessage("Checking server connection quality...")
+            setCancelable(false)
+            show()
+        }
+
+        // Get server IP from AppConfig
+        val serverUrl = AppConfig.serverIP
+
+        networkQualityChecker?.checkConnectionQuality(serverUrl) { isQualitySufficient ->
+            progressDialog.dismiss()
+            connectionQualityChecked = true
+
+            if (!isQualitySufficient && AppConfig.online) {
+                // Switch to offline mode if connection is insufficient
+                AppConfig.online = false
+
+                // Show explanation dialog
+                AlertDialog.Builder(this)
+                    .setTitle("Switched to Offline Mode")
+                    .setMessage("The connection to the server is unstable or slow. The app has automatically switched to offline mode for better reliability.")
+                    .setPositiveButton("OK") { _, _ -> updateModeDisplay() }
+                    .show()
+            }
+
+            // Update UI to reflect the mode
+            updateModeDisplay()
+        }
+    }
+    private fun updateModeDisplay() {
+        // Update any UI elements that show the current mode
+//        val modeTextView: TextView = findViewById(R.id.modeTextView)
+//        val modeText = if (AppConfig.online) "Online Mode" else "Offline Mode"
+//        modeTextView.text = modeText
+//
+//        // If you have a status indicator, update it too
+//        val statusIndicator: ImageView = findViewById(R.id.statusIndicator)
+//        statusIndicator.setImageResource(
+//            if (AppConfig.online) R.drawable.ic_online_status
+//            else R.drawable.ic_offline_status
+//        )
+    }
+
+
     private fun setupToolbar() {
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
 
         // Set title based on view type
-        supportActionBar?.title = if (isBackView) {
-            getString(R.string.back_recording)
-        } else {
-            getString(R.string.back_recording)
-        }
+        supportActionBar?.title = ""
 
         // Remove the playback button if it exists
         val playbackButton = findViewById<Button>(R.id.playbackButton)

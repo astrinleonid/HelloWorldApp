@@ -99,28 +99,6 @@ object RecordManager {
         return "OFF${timestamp}${deviceHash}${random}"
     }
 
-//    suspend fun fetchUniqueId(numChunks: Int): String? = withContext(Dispatchers.IO) {
-//        val client = OkHttpClient()
-//        val deviceInfo = mapOf(
-//            "model" to Build.MODEL,
-//            "manufacturer" to Build.MANUFACTURER
-//        )
-//        if (AppConfig.online) {
-//            val requestBody = Gson().toJson(deviceInfo)
-//                .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-//            val request = Request.Builder()
-//                .url("${AppConfig.serverIP}/getUniqueId?numChunks=$numChunks")
-//                .post(requestBody)
-//                .build()
-//            client.newCall(request).execute().use { response ->
-//                if (response.isSuccessful) {
-//                    response.body?.string()
-//                } else null
-//            }
-//        } else {
-//            generateOfflineId()
-//        }
-//    }
 
     fun syncWithServer(recordId: String, callback: (Boolean) -> Unit) {
         if (!AppConfig.online) {
