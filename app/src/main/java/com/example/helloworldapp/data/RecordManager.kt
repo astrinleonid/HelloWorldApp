@@ -257,7 +257,7 @@ object RecordManager {
     }
 
     fun resetPoint(recordingId: String, pointNumber: Int, context: Context, onComplete: (Boolean) -> Unit) {
-        // Inflate custom dialog layout
+        // First, check if we need to show a confirmation dialog
         val dialogView = LayoutInflater.from(context).inflate(R.layout.confirm_delete_dialog, null)
 
         // Update message with point number
@@ -279,7 +279,16 @@ object RecordManager {
         // Set up delete button
         dialogView.findViewById<Button>(R.id.deleteButton).setOnClickListener {
             alertDialog.dismiss()
+
+            // Now delegate to the Recording class
             val success = recordings[recordingId]?.resetPoint(pointNumber, context) ?: false
+
+            // If deletion was successful, update our local model
+            if (success) {
+                recordings[recordingId]?.getPointRecord(pointNumber)?.reset()
+            }
+
+            // Call the completion callback
             onComplete(success)
         }
 

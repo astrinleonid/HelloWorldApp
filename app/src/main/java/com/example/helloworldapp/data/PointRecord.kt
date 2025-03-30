@@ -5,6 +5,11 @@ import android.content.Context
 import android.util.Log
 import android.widget.Toast
 import com.example.helloworldapp.R
+import kotlin.Result
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import java.io.File
 
 
@@ -54,30 +59,126 @@ data class PointRecord(
         fileName = null
     }
 
-    fun deleteFile(context: Context): Boolean {
+    fun deleteFile(context: Context, recordingId: String): Boolean {
+        Log.d("PointRecord", "deleteFile called for point $pointNumber with recordingId=$recordingId")
+        Log.d("PointRecord", "Online mode: ${AppConfig.online}, fileName: $fileName")
+
         return try {
-            fileName?.let { name ->
-                val file = File(context.filesDir, name)
-                if (file.exists()) {
-                    val success = file.delete()
-                    if (success) {
-                        fileName = null
-                    }
-                    success
-                } else {
-                    true // File didn't exist, consider it a success
+            if (fileName == null) {
+                Log.d("PointRecord", "No filename to delete, returning success")
+                return true // No file to delete, consider it a success
+            }
+
+            var success = false
+
+            if (AppConfig.online) {
+                // Online mode - delete file from server
+                Log.d("PointRecord", "Online mode detected, attempting server deletion")
+
+                runBlocking {
+                    success = deleteFileFromServer(recordingId, fileName!!)
                 }
-            } ?: true // No file to delete, consider it a success
+
+                Log.d("PointRecord", "Server deletion completed with result: $success")
+            } else {
+                // Offline mode code...
+            }
+
+            // Only reset state if deletion was successful
+            if (success) {
+                Log.d("PointRecord", "Deletion successful, resetting point state")
+                fileName = null
+                isRecorded = false
+                label = RecordLabel.NOLABEL
+            } else {
+                Log.d("PointRecord", "Deletion failed, NOT resetting state")
+            }
+
+            return success
         } catch (e: Exception) {
             Log.e("PointRecord", "Error deleting file for point $pointNumber", e)
-            false
+            return false
         }
     }
 
-    fun getFilePath(context: Context): String? {
-        return fileName?.let { name ->
-            val file = File(context.filesDir, name)
-            if (file.exists()) file.absolutePath else null
+    // Separate method for local file deletion
+    private fun performLocalDelete(context: Context): Boolean {
+        if (fileName == null) {
+            Log.d("PointRecord", "No filename to delete, returning success")
+            return true
+        }
+
+        Log.d("PointRecord", "Deleting local file: $fileName")
+        try {
+            val file = File(context.filesDir, fileName!!)
+            Log.d("PointRecord", "File exists: ${file.exists()}, path: ${file.absolutePath}")
+
+            val success = if (file.exists()) file.delete() else true
+            Log.d("PointRecord", "Local file deletion result: $success")
+
+            if (success) {
+                // Reset state
+                fileName = null
+                isRecorded = false
+                label = RecordLabel.NOLABEL
+            }
+
+            return success
+        } catch (e: Exception) {
+            Log.e("PointRecord", "Error deleting local file", e)
+            return false
+        }
+    }
+
+    // Server file deletion function that will be called on a background thread
+    private suspend fun deleteFileFromServer(recordingId: String, fileName: String): Boolean {
+        Log.d("PointRecord", "deleteFileFromServer called with recordingId=$recordingId, fileName=$fileName")
+
+        // Extract the point number for the server
+        val pointNumberMatch = "point(\\d+)".toRegex().find(fileName)
+        val pointNumber = pointNumberMatch?.groupValues?.get(1) ?: run {
+            Log.e("PointRecord", "Could not extract point number from filename: $fileName")
+            return false
+        }
+
+        Log.d("PointRecord", "Extracted point number: $pointNumber")
+
+        // Use suspendCancellableCoroutine instead of CompletableDeferred
+        return withContext(Dispatchers.IO) {
+            try {
+                suspendCancellableCoroutine { continuation ->
+                    // Prepare parameters
+                    val params = mapOf(
+                        "folderId" to recordingId,
+                        "fileName" to pointNumber
+                    )
+
+                    // Register cancellation
+                    continuation.invokeOnCancellation {
+                        Log.d("PointRecord", "Request was cancelled")
+                    }
+
+                    ServerApi.get("/file_delete", params) { result ->
+                        when (result) {
+                            is ServerApi.ApiResult.Success -> {
+                                Log.d("PointRecord", "Server file deletion successful")
+                                if (continuation.isActive) {
+                                    continuation.resumeWith(Result.success(true))
+                                }
+                            }
+                            is ServerApi.ApiResult.Error -> {
+                                Log.e("PointRecord", "Server file deletion failed: ${result.message}")
+                                if (continuation.isActive) {
+                                    continuation.resumeWith(Result.success(false))
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("PointRecord", "Exception in deleteFileFromServer", e)
+                false
+            }
         }
     }
 
@@ -157,7 +258,7 @@ data class Recording(
     }
 
     fun resetPoint(pointNumber: Int, context: Context): Boolean {
-        return points[pointNumber]?.deleteFile(context) ?: false
+        return points[pointNumber]?.deleteFile(context, id) ?: false
     }
 
     fun playPointRecording(pointNumber: Int, context: Context) {
@@ -202,7 +303,7 @@ data class Recording(
         // Delete each file associated with points
         points.values.forEach { point ->
             if (point.fileName != null) {
-                val success = point.deleteFile(context)
+                val success = point.deleteFile(context, id)
                 if (!success) hasErrors = true
                 deletedCount++
             }

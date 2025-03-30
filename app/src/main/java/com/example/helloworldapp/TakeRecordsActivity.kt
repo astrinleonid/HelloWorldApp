@@ -1,10 +1,10 @@
 package com.example.helloworldapp
 
+import AppConfig
 import NetworkQualityChecker
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.ProgressDialog
-import android.app.ProgressDialog.show
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -19,8 +19,6 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -83,6 +81,9 @@ class TakeRecordsActivity : AppCompatActivity() {
         setupButtons()
         createButtonGrid()
         updateAllButtons()
+        if (AppConfig.online) {
+            checkServerConnectionQuality()
+        }
     }
 
     private fun checkServerConnectionQuality() {
@@ -108,26 +109,13 @@ class TakeRecordsActivity : AppCompatActivity() {
                 AlertDialog.Builder(this)
                     .setTitle("Switched to Offline Mode")
                     .setMessage("The connection to the server is unstable or slow. The app has automatically switched to offline mode for better reliability.")
-                    .setPositiveButton("OK") { _, _ -> updateModeDisplay() }
+//                    .setPositiveButton("OK") { _, _ -> updateModeDisplay() }
                     .show()
             }
 
             // Update UI to reflect the mode
-            updateModeDisplay()
+//            updateModeDisplay()
         }
-    }
-    private fun updateModeDisplay() {
-        // Update any UI elements that show the current mode
-//        val modeTextView: TextView = findViewById(R.id.modeTextView)
-//        val modeText = if (AppConfig.online) "Online Mode" else "Offline Mode"
-//        modeTextView.text = modeText
-//
-//        // If you have a status indicator, update it too
-//        val statusIndicator: ImageView = findViewById(R.id.statusIndicator)
-//        statusIndicator.setImageResource(
-//            if (AppConfig.online) R.drawable.ic_online_status
-//            else R.drawable.ic_offline_status
-//        )
     }
 
 
@@ -199,8 +187,7 @@ class TakeRecordsActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             ))
-
-
+            
             // Create and add overlay buttons (initially invisible)
 
             val overlay = layoutInflater.inflate(R.layout.overlay_icons, container, false).apply {
@@ -283,9 +270,6 @@ class TakeRecordsActivity : AppCompatActivity() {
         val mainButton = container.getChildAt(0) as? Button
         val overlay = container.getChildAt(1)
         val record = RecordManager.getPointRecord(recordingId, pointNumber)
-
-
-
 
         if (RecordManager.isRecorded(recordingId, pointNumber) == true) {
 
