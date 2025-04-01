@@ -1,6 +1,8 @@
 package com.example.helloworldapp.utils
 
+import android.app.ProgressDialog
 import android.content.Intent
+import android.util.Log
 import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -38,14 +40,50 @@ object DialogUtils {
         dialogView.findViewById<Button>(R.id.btnDeleteRecording).setOnClickListener {
             dialog.dismiss()
             recordId?.let { id ->
-                RecordManager.deleteRecording(id, activity) { success ->
-                    if (success) {
-                        activity.startActivity(Intent(activity, MainActivity::class.java))
-                        activity.finish()
-                    } else {
-                        Toast.makeText(activity, "Error deleting recording", Toast.LENGTH_SHORT).show()
-                    }
+                // Show progress dialog
+                val progressDialog = ProgressDialog(activity).apply {
+                    setMessage("Deleting recording...")
+                    setCancelable(false)
+                    show()
                 }
+
+                // Use a simple Thread for the deletion operation
+                Thread {
+                    try {
+                        // Call the synchronous deletion method
+                        val success = RecordManager.deleteRecordingSync(id, activity)
+
+                        // Always return to UI thread for activities
+                        activity.runOnUiThread {
+                            progressDialog.dismiss()
+
+                            // Log the result
+                            Log.d("DialogUtils", "Delete result: $success, returning to MainActivity")
+
+                            // Always navigate back to avoid being stuck
+                            val intent = Intent(activity, MainActivity::class.java)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                    Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                                    Intent.FLAG_ACTIVITY_NEW_TASK)
+                            activity.startActivity(intent)
+                            activity.finish()
+                        }
+                    } catch (e: Exception) {
+                        // Handle exceptions
+                        activity.runOnUiThread {
+                            progressDialog.dismiss()
+                            Log.e("DialogUtils", "Error during deletion", e)
+
+                            // Show error but still navigate back
+                            Toast.makeText(activity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+
+                            val intent = Intent(activity, MainActivity::class.java)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                            activity.startActivity(intent)
+                            activity.finish()
+                        }
+                    }
+                }.start()
             }
         }
 

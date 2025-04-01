@@ -187,7 +187,7 @@ class TakeRecordsActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             ))
-            
+
             // Create and add overlay buttons (initially invisible)
 
             val overlay = layoutInflater.inflate(R.layout.overlay_icons, container, false).apply {

@@ -1,9 +1,11 @@
 package com.example.helloworldapp.data
 
+import AppConfig
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
+import android.os.Looper
 import android.telephony.mbms.FileInfo
 import android.util.Log
 import com.google.gson.Gson
@@ -22,6 +24,12 @@ import java.io.File
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
+/**
+ * ServerApi - Utility class for server interactions
+ *
+ * All server communication should go through this class to maintain
+ * a clean separation of concerns.
+ */
 object ServerApi {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val client = OkHttpClient.Builder()
@@ -38,33 +46,16 @@ object ServerApi {
     }
 
     /**
-     * Send a GET request to the server
-     *
-     * @param route The API route (e.g. "/checkConnection")
-     * @param params Map of query parameters
-     * @param callback Callback to handle the response
+     * Send a GET request to the server (asynchronous)
      */
-    fun get(route: String, params: Map<String, String> = emptyMap(), callback: (ApiResult<String>) -> Unit) {
-        if (!isOnline()) {
+    fun get(route: String, params: Map<String, String> = emptyMap(), context: Context? = null, callback: (ApiResult<String>) -> Unit) {
+        if (!isOnline(context)) {
             callback(ApiResult.Error("Device is offline", -1))
             return
         }
 
         // Build URL with query parameters
-        val urlBuilder = StringBuilder()
-        urlBuilder.append(AppConfig.serverIP).append(route)
-
-        if (params.isNotEmpty()) {
-            urlBuilder.append("?")
-            params.entries.forEachIndexed { index, entry ->
-                if (index > 0) urlBuilder.append("&")
-                urlBuilder.append(URLEncoder.encode(entry.key, "UTF-8"))
-                    .append("=")
-                    .append(URLEncoder.encode(entry.value, "UTF-8"))
-            }
-        }
-
-        val url = urlBuilder.toString()
+        val url = buildUrl(route, params)
         Log.d("ServerApi", "GET request to $url")
 
         // Create request
@@ -78,20 +69,58 @@ object ServerApi {
     }
 
     /**
-     * Send a POST request to the server
-     *
-     * @param route The API route (e.g. "/upload")
-     * @param params Map of form parameters
-     * @param files Map of files to upload (fieldName to file path)
-     * @param callback Callback to handle the response
+     * Send a GET request to the server (synchronous)
+     * Should only be called from a background thread
+     */
+    fun getSync(route: String, params: Map<String, String> = emptyMap(), context: Context? = null): ApiResult<String> {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            Log.e("ServerApi", "getSync called on main thread! This will block the UI.")
+        }
+
+        if (!isOnline(context)) {
+            return ApiResult.Error("Device is offline", -1)
+        }
+
+        // Build URL with query parameters
+        val url = buildUrl(route, params)
+        Log.d("ServerApi", "Sync GET request to $url")
+
+        // Create request
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .build()
+
+        // Execute request synchronously
+        return try {
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string() ?: ""
+
+                if (response.isSuccessful) {
+                    Log.d("ServerApi", "Sync request successful: ${response.code}")
+                    ApiResult.Success(responseBody)
+                } else {
+                    Log.e("ServerApi", "Sync request failed: ${response.code}, ${response.message}")
+                    ApiResult.Error(response.message, response.code)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ServerApi", "Exception in sync request", e)
+            ApiResult.Error("Network error: ${e.message}", exception = e)
+        }
+    }
+
+    /**
+     * Send a POST request to the server (asynchronous)
      */
     fun post(
         route: String,
         params: Map<String, String> = emptyMap(),
         files: Map<String, FileInfo> = emptyMap(),
+        context: Context? = null,
         callback: (ApiResult<String>) -> Unit
     ) {
-        if (!isOnline()) {
+        if (!isOnline(context)) {
             callback(ApiResult.Error("Device is offline", -1))
             return
         }
@@ -130,14 +159,76 @@ object ServerApi {
     }
 
     /**
-     * Send POST request with raw JSON body
-     *
-     * @param route The API route
-     * @param jsonBody The JSON body as an object (will be serialized to JSON)
-     * @param callback Callback to handle the response
+     * Send a POST request to the server (synchronous)
+     * Should only be called from a background thread
      */
-    fun postJson(route: String, jsonBody: Any, callback: (ApiResult<String>) -> Unit) {
-        if (!isOnline()) {
+    fun postSync(
+        route: String,
+        params: Map<String, String> = emptyMap(),
+        files: Map<String, FileInfo> = emptyMap(),
+        context: Context? = null
+    ): ApiResult<String> {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            Log.e("ServerApi", "postSync called on main thread! This will block the UI.")
+        }
+
+        if (!isOnline(context)) {
+            return ApiResult.Error("Device is offline", -1)
+        }
+
+        val url = "${AppConfig.serverIP}$route"
+        Log.d("ServerApi", "Sync POST request to $url")
+
+        // Build multipart request
+        val requestBodyBuilder = MultipartBody.Builder().setType(MultipartBody.FORM)
+
+        // Add form parameters
+        params.forEach { (key, value) ->
+            requestBodyBuilder.addFormDataPart(key, value)
+        }
+
+        // Add files
+        files.forEach { (fieldName, fileInfo) ->
+            val file = File(fileInfo.path)
+            if (file.exists()) {
+                val mediaType = fileInfo.mimeType.toMediaTypeOrNull()
+                val requestBody = file.asRequestBody(mediaType)
+                requestBodyBuilder.addFormDataPart(fieldName, fileInfo.name, requestBody)
+            } else {
+                Log.e("ServerApi", "File not found: ${fileInfo.path}")
+            }
+        }
+
+        // Create request
+        val request = Request.Builder()
+            .url(url)
+            .post(requestBodyBuilder.build())
+            .build()
+
+        // Execute request synchronously
+        return try {
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string() ?: ""
+
+                if (response.isSuccessful) {
+                    Log.d("ServerApi", "Sync POST request successful: ${response.code}")
+                    ApiResult.Success(responseBody)
+                } else {
+                    Log.e("ServerApi", "Sync POST request failed: ${response.code}, ${response.message}")
+                    ApiResult.Error(response.message, response.code)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ServerApi", "Exception in sync POST request", e)
+            ApiResult.Error("Network error: ${e.message}", exception = e)
+        }
+    }
+
+    /**
+     * Send POST request with raw JSON body (asynchronous)
+     */
+    fun postJson(route: String, jsonBody: Any, context: Context? = null, callback: (ApiResult<String>) -> Unit) {
+        if (!isOnline(context)) {
             callback(ApiResult.Error("Device is offline", -1))
             return
         }
@@ -154,6 +245,142 @@ object ServerApi {
             .build()
 
         executeRequest(request, callback)
+    }
+
+    /**
+     * Send POST request with raw JSON body (synchronous)
+     * Should only be called from a background thread
+     */
+    fun postJsonSync(route: String, jsonBody: Any, context: Context? = null): ApiResult<String> {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            Log.e("ServerApi", "postJsonSync called on main thread! This will block the UI.")
+        }
+
+        if (!isOnline(context)) {
+            return ApiResult.Error("Device is offline", -1)
+        }
+
+        val url = "${AppConfig.serverIP}$route"
+        Log.d("ServerApi", "Sync POST JSON request to $url")
+
+        val jsonString = gson.toJson(jsonBody)
+        val requestBody = jsonString.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+
+        val request = Request.Builder()
+            .url(url)
+            .post(requestBody)
+            .build()
+
+        return try {
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string() ?: ""
+
+                if (response.isSuccessful) {
+                    Log.d("ServerApi", "Sync POST JSON request successful: ${response.code}")
+                    ApiResult.Success(responseBody)
+                } else {
+                    Log.e("ServerApi", "Sync POST JSON request failed: ${response.code}, ${response.message}")
+                    ApiResult.Error(response.message, response.code)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ServerApi", "Exception in sync POST JSON request", e)
+            ApiResult.Error("Network error: ${e.message}", exception = e)
+        }
+    }
+
+    /**
+     * Download a file from the server (asynchronous)
+     */
+    fun downloadFile(route: String, params: Map<String, String> = emptyMap(), context: Context? = null, callback: (ByteArray?) -> Unit) {
+        if (!isOnline(context)) {
+            callback(null)
+            return
+        }
+
+        val url = buildUrl(route, params)
+        Log.d("ServerApi", "Downloading file from: $url")
+
+        scope.launch {
+            try {
+                val request = Request.Builder()
+                    .url(url)
+                    .get()
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        Log.e("ServerApi", "Failed to download file: ${response.code}")
+                        withContext(Dispatchers.Main) {
+                            callback(null)
+                        }
+                        return@use
+                    }
+
+                    val bytes = response.body?.bytes()
+                    if (bytes == null || bytes.isEmpty()) {
+                        Log.e("ServerApi", "Downloaded file is empty")
+                        withContext(Dispatchers.Main) {
+                            callback(null)
+                        }
+                        return@use
+                    }
+
+                    Log.d("ServerApi", "Downloaded ${bytes.size} bytes")
+                    withContext(Dispatchers.Main) {
+                        callback(bytes)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("ServerApi", "Error downloading file", e)
+                withContext(Dispatchers.Main) {
+                    callback(null)
+                }
+            }
+        }
+    }
+
+    /**
+     * Download a file from the server (synchronous)
+     * Should only be called from a background thread
+     */
+    fun downloadFileSync(route: String, params: Map<String, String> = emptyMap(), context: Context? = null): ByteArray? {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            Log.e("ServerApi", "downloadFileSync called on main thread! This will block the UI.")
+        }
+
+        if (!isOnline(context)) {
+            return null
+        }
+
+        val url = buildUrl(route, params)
+        Log.d("ServerApi", "Downloading file synchronously from: $url")
+
+        return try {
+            val request = Request.Builder()
+                .url(url)
+                .get()
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.e("ServerApi", "Failed to download file: ${response.code}")
+                    return null
+                }
+
+                val bytes = response.body?.bytes()
+                if (bytes == null || bytes.isEmpty()) {
+                    Log.e("ServerApi", "Downloaded file is empty")
+                    return null
+                }
+
+                Log.d("ServerApi", "Downloaded ${bytes.size} bytes")
+                bytes
+            }
+        } catch (e: Exception) {
+            Log.e("ServerApi", "Error downloading file", e)
+            null
+        }
     }
 
     /**
@@ -187,21 +414,56 @@ object ServerApi {
     }
 
     /**
-     * Check if the device has internet connectivity
+     * Build a URL with query parameters
      */
-    fun isOnline(): Boolean {
-        val context = try {
-            // Get application context
-            val applicationClass = Class.forName("com.example.helloworldapp.TeproApplication")
-            val instanceField = applicationClass.getDeclaredField("instance")
-            val applicationInstance = instanceField.get(null) as Context
-            applicationInstance
-        } catch (e: Exception) {
-            Log.e("ServerApi", "Error getting application context, using local context", e)
-            return true // Default to true to allow the attempt
+    private fun buildUrl(route: String, params: Map<String, String>): String {
+        val urlBuilder = StringBuilder()
+        urlBuilder.append(AppConfig.serverIP).append(route)
+
+        if (params.isNotEmpty()) {
+            urlBuilder.append("?")
+            params.entries.forEachIndexed { index, entry ->
+                if (index > 0) urlBuilder.append("&")
+                urlBuilder.append(URLEncoder.encode(entry.key, "UTF-8"))
+                    .append("=")
+                    .append(URLEncoder.encode(entry.value, "UTF-8"))
+            }
         }
 
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        return urlBuilder.toString()
+    }
+
+    /**
+     * Check if the device has internet connectivity
+     */
+    fun isOnline(context: Context? = null): Boolean {
+        // Get context from parameter or try alternative methods
+        val appContext = context ?: try {
+            // Try to get context using reflection
+            val activityThreadClass = Class.forName("android.app.ActivityThread")
+            val currentApplicationMethod = activityThreadClass.getDeclaredMethod("currentApplication")
+            val currentApplication = currentApplicationMethod.invoke(null) as? Context
+            currentApplication
+        } catch (e: Exception) {
+            try {
+                // Alternative approach to get application context
+                val application = Class.forName("android.app.AppGlobals")
+                    .getDeclaredMethod("getInitialApplication")
+                    .invoke(null) as? Context
+                application
+            } catch (e: Exception) {
+                Log.e("ServerApi", "Error getting application context", e)
+                null
+            }
+        }
+
+        // If no context is available, default to assuming online
+        if (appContext == null) {
+            Log.w("ServerApi", "No context available to check network state, assuming online")
+            return true
+        }
+
+        val connectivityManager = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return false
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
