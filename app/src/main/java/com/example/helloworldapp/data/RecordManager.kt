@@ -48,7 +48,6 @@ object RecordManager {
         if (AppConfig.online) {
             registerIdWithServer(recordingId, AppConfig.numChunks)
         }
-
         return recordingId
     }
 
