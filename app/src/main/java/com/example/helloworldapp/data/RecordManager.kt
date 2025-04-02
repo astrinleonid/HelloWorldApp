@@ -472,57 +472,74 @@ object RecordManager {
      * Uploads a local file to the server using ServerApi
      * @return true if upload was successful
      */
+    /**
+     * Uploads a local file to the server using ServerApi
+     * @return true if upload was successful
+     */
     private fun uploadFileToServer(file: File, recordingId: String, serverFileName: String, context: Context): Boolean {
         try {
             Log.d("RecordManager", "Uploading file: ${file.name} to server as $serverFileName")
 
-            // Create a temporary file with the server filename if needed
-            val fileToUpload = if (file.name != serverFileName) {
-                val tempFile = File(context.cacheDir, serverFileName)
-                file.copyTo(tempFile, overwrite = true)
-                tempFile
-            } else {
-                file
+            // Extract the point number from the server filename
+            val pointNumber = serverFileName.replace(".wav", "").toIntOrNull() ?: run {
+                // Alternative extraction for different filename formats
+                val match = "\\d+".toRegex().find(serverFileName)?.value?.toIntOrNull()
+                match ?: return false
             }
+
+            // Generate a point record ID for the server
+            // This should match how your server validates it
+            val pointRecordId = "$recordingId-$pointNumber" // Adjust this format if needed
 
             // Prepare file info for ServerApi
             val fileInfo = ServerApi.FileInfo(
-                path = fileToUpload.absolutePath,
-                name = serverFileName,
+                path = file.absolutePath,
+                name = file.name, // Keep original name as file.filename for upload
                 mimeType = "audio/wav"
             )
 
-            // Prepare params for the upload
-            val params = mapOf("folderId" to recordingId)
+            // Prepare params for the upload according to the server endpoint
+            val params = mapOf(
+                "record_id" to recordingId,
+                "button_number" to pointNumber.toString(),
+                "pointRecordId" to pointRecordId
+            )
 
             // Map of files to upload (field name -> file info)
             val files = mapOf("file" to fileInfo)
 
             // Use ServerApi.postSync for the file upload
             val result = ServerApi.postSync(
-                route = "/upload_file",
+                route = "/upload_file", // The correct route based on your server
                 params = params,
                 files = files,
                 context = context
             )
 
-            // Clean up temp file if created
-            if (file.name != serverFileName) {
-                try {
-                    File(context.cacheDir, serverFileName).delete()
-                } catch (e: Exception) {
-                    Log.e("RecordManager", "Error cleaning up temp file", e)
-                }
-            }
-
             return when (result) {
                 is ServerApi.ApiResult.Success -> {
-                    Log.d("RecordManager", "File upload successful: $serverFileName")
-                    true
+                    try {
+                        // Parse the response to check for success
+                        val responseJson = JSONObject(result.data)
+
+                        if (responseJson.has("error")) {
+                            Log.e("RecordManager", "Server returned error: ${responseJson.getString("error")}")
+                            return false
+                        }
+
+                        val message = responseJson.optString("message", "")
+                        val returnedFilename = responseJson.optString("filename", "")
+
+                        Log.d("RecordManager", "File upload successful: $returnedFilename, message: $message")
+                        return true
+                    } catch (e: Exception) {
+                        Log.e("RecordManager", "Error parsing upload response", e)
+                        return false
+                    }
                 }
                 is ServerApi.ApiResult.Error -> {
                     Log.e("RecordManager", "File upload failed: ${result.message}")
-                    false
+                    return false
                 }
             }
         } catch (e: Exception) {
