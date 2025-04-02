@@ -3,6 +3,7 @@ package com.example.helloworldapp
 
 import AppConfig
 import android.app.AlertDialog
+import android.app.ProgressDialog
 import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
@@ -14,7 +15,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.helloworldapp.adapters.RecordsAdapter
 import com.example.helloworldapp.data.RecordManager
-import com.example.helloworldapp.data.RecordManager.checkServerResponse
 import com.example.helloworldapp.utils.SettingsUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -99,6 +99,38 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkServerResponse(callback: (Boolean) -> Unit) {
+        // Only try to contact server if in online mode
+        if (!AppConfig.online) {
+            callback(false)
+            return
+        }
+
+        // Show a progress dialog while checking
+        val progressDialog = ProgressDialog(this).apply {
+            setMessage("Checking server connection...")
+            setCancelable(false)
+            show()
+        }
+
+        // Use ServerApi to check connection
+        RecordManager.checkServerResponse { isConnected ->
+            progressDialog.dismiss()
+
+            if (!isConnected && AppConfig.online) {
+                // Server is not reachable but app is in online mode
+                // Show the error dialog
+                serverErrorDialog = true
+                showServerErrorDialog()
+
+                // Return failure
+                callback(false)
+            } else {
+                // Server is reachable or app is in offline mode
+                callback(true)
+            }
+        }
+    }
     private fun showServerErrorDialog() {
         AlertDialog.Builder(this)
             .setTitle("Server Error")
