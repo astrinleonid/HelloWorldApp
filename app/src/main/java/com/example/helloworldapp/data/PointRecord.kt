@@ -310,6 +310,43 @@ data class Recording(
             }
         }
     }
+    fun syncLabelsWithServer(context: Context) {
+        if (!AppConfig.online) return
+
+        // Use a background thread for the network operation
+        Thread {
+            try {
+                // Create the label data map for all points in the recording
+                val labels = points.values
+                    .filter { it.isRecorded && it.fileName != null }
+                    .associate { point -> point.fileName!! to point.label.toString().lowercase() }
+
+                // Skip if no labeled points to sync
+                if (labels.isEmpty()) {
+                    Log.d("Recording", "No labels to sync with server")
+                    return@Thread
+                }
+
+                // Correctly include the folderId as a URL parameter
+                val url = "/update_labels?folderId=$id"
+
+                // Use the generic postJson method from ServerApi with the URL including parameters
+                val result = ServerApi.postJsonSync(url, labels, context)
+
+                when (result) {
+                    is ServerApi.ApiResult.Success -> {
+                        Log.d("Recording", "Labels updated successfully on server")
+                    }
+                    is ServerApi.ApiResult.Error -> {
+                        Log.e("Recording", "Failed to update labels on server: ${result.message}")
+                    }
+                    else -> {}
+                }
+            } catch (e: Exception) {
+                Log.e("Recording", "Error updating labels on server", e)
+            }
+        }.start()
+    }
 
     private fun extractPointNumber(filename: String): Int? {
         return if (AppConfig.online) {

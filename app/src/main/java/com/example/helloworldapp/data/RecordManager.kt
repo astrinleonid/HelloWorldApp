@@ -15,30 +15,22 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import com.example.helloworldapp.R
-import com.google.gson.Gson
 import getDeviceIdentifier
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
 import org.json.JSONObject
 import java.io.File
-import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 object RecordManager {
     private val recordings = mutableMapOf<String, Recording>()
     private var applicationContext: Context? = null
 
-    // Add this method to RecordManager
+    // Initialize with application context
     fun initialize(context: Context) {
         applicationContext = context.applicationContext
     }
+
     suspend fun initializeRecording(id: String? = null): String {
         // If ID is provided, use it directly
         if (id != null) {
@@ -59,13 +51,9 @@ object RecordManager {
 
         return recordingId
     }
+
     private suspend fun registerIdWithServer(recordingId: String, numChunks: Int): Boolean = withContext(Dispatchers.IO) {
         try {
-            val client = OkHttpClient.Builder()
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(10, TimeUnit.SECONDS)
-                .build()
-
             // Prepare device info for the server
             val deviceInfo = mapOf(
                 "id" to recordingId,
@@ -74,29 +62,26 @@ object RecordManager {
                 "deviceId" to UniqueIdGenerator.getDeviceIdentifier()
             )
 
-            // Create the request
-            val requestBody = Gson().toJson(deviceInfo)
-                .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+            // Create URL with query parameter
+            val url = "/getUniqueId?numChunks=$numChunks"
 
-            val request = Request.Builder()
-                .url("${AppConfig.serverIP}/getUniqueId?numChunks=$numChunks")
-                .post(requestBody)
-                .build()
+            // Use ServerApi for the request
+            val result = ServerApi.postJsonSync(url, deviceInfo, applicationContext)
 
-            // Execute the request
-            client.newCall(request).execute().use { response ->
-                val success = response.isSuccessful
-                if (success) {
-                    val responseBody = response.body?.string()
-                    Log.d("RecordManager", "Server accepted ID registration: $responseBody")
-                } else {
-                    Log.e("RecordManager", "Server rejected ID registration: ${response.message}")
+            when (result) {
+                is ServerApi.ApiResult.Success -> {
+                    Log.d("RecordManager", "Server accepted ID registration: ${result.data}")
+                    true
                 }
-                return@withContext success
+                is ServerApi.ApiResult.Error -> {
+                    Log.e("RecordManager", "Server rejected ID registration: ${result.message}")
+                    false
+                }
+                else -> false
             }
         } catch (e: Exception) {
             Log.e("RecordManager", "Error registering ID with server", e)
-            return@withContext false
+            false
         }
     }
 
@@ -106,43 +91,44 @@ object RecordManager {
             return
         }
 
-        val client = OkHttpClient()
-        val request = Request.Builder()
-            .url("${AppConfig.serverIP}/get_wav_files?folderId=$recordId")
-            .build()
+        // Use the query parameter in the URL
+        val url = "/get_wav_files?folderId=$recordId"
 
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                Log.e("RecordManager", "Failed to sync with server", e)
-                callback(false)
-            }
+        // Use ServerApi for the request
+        ServerApi.get(url, context = applicationContext) { result ->
+            when (result) {
+                is ServerApi.ApiResult.Success -> {
+                    try {
+                        val jsonData = result.data
+                        val json = JSONObject(jsonData)
+                        val files = json.getString("files").split(" ")
+                        val labels = json.optJSONObject("labels") ?: JSONObject()
 
-            override fun onResponse(call: Call, response: Response) {
-                try {
-                    val jsonData = response.body?.string() ?: return
-                    val json = JSONObject(jsonData)
-                    val files = json.getString("files").split(" ")
-                    val labels = json.optJSONObject("labels") ?: JSONObject()
+                        // Get or create the recording
+                        val recording = recordings[recordId] ?: run {
+                            val newRecording = Recording(recordId)
+                            recordings[recordId] = newRecording
+                            newRecording
+                        }
 
-                    // Get or create the recording
-                    val recording = recordings[recordId] ?: run {
-                        val newRecording = Recording(recordId)
-                        recordings[recordId] = newRecording
-                        newRecording
+                        // Process each file to update point records
+                        files.forEach { filename ->
+                            val labelStr = labels.optString(filename, "")
+                            recording.updateFromServerData(filename, labelStr)
+                        }
+                        callback(true)
+                    } catch (e: Exception) {
+                        Log.e("RecordManager", "Error processing server response", e)
+                        callback(false)
                     }
-
-                    // Process each file to update point records
-                    files.forEach { filename ->
-                        val labelStr = labels.optString(filename, "")
-                        recording.updateFromServerData(filename, labelStr)
-                    }
-                    callback(true)
-                } catch (e: Exception) {
-                    Log.e("RecordManager", "Error processing server response", e)
+                }
+                is ServerApi.ApiResult.Error -> {
+                    Log.e("RecordManager", "Failed to sync with server: ${result.message}")
                     callback(false)
                 }
+                else -> callback(false)
             }
-        })
+        }
     }
 
     fun getAllPointRecords(recordId: String): Map<Int, PointRecord>? {
@@ -162,13 +148,10 @@ object RecordManager {
         recordings[recordingId]?.setPointRecorded(pointNumber)
     }
 
-
-    // Then update cyclePointLabel to use the stored context
     fun cyclePointLabel(recordingId: String, pointNumber: Int): RecordLabel? {
         val context = applicationContext ?: return null
         return recordings[recordingId]?.getPointRecord(pointNumber)?.cycleLabel(recordingId, context)
     }
-
 
     fun isRecorded(recordingId: String, pointNumber: Int): Boolean {
         return recordings[recordingId]?.isPointRecorded(pointNumber) ?: false
@@ -189,8 +172,9 @@ object RecordManager {
             // For online mode, use ServerApi
             Log.d("RecordManager", "Deleting recording from server: $id")
 
-            val params = mapOf("record_id" to id)
-            val result = ServerApi.getSync("/delete_record_folder", params, context)
+            // Use the URL with query parameter
+            val url = "/delete_record_folder?record_id=$id"
+            val result = ServerApi.getSync(url, context = context)
 
             when (result) {
                 is ServerApi.ApiResult.Success -> {
@@ -203,7 +187,7 @@ object RecordManager {
                     Log.e("RecordManager", "Error deleting recording from server: ${result.message}")
                     false
                 }
-                else -> {false}
+                else -> false
             }
         } else {
             // Offline mode - delete local files
@@ -258,30 +242,30 @@ object RecordManager {
             }
         }
     }
+
     fun setRemoteFileName(recordingId: String, pointNumber: Int, filename: String) {
         recordings[recordingId]?.setRemoteFileName(pointNumber, filename)
     }
 
     fun checkServerResponse(callback: (Boolean) -> Unit) {
-        val client = OkHttpClient()
-        val request = Request.Builder()
-            .url("${AppConfig.serverIP}/checkConnection")
-            .build()
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                callback(false)
+        // Use ServerApi for the connection check
+        ServerApi.get("/checkConnection", context = applicationContext) { result ->
+            when (result) {
+                is ServerApi.ApiResult.Success -> callback(true)
+                else -> callback(false)
             }
-
-            override fun onResponse(call: Call, response: Response) {
-                callback(response.isSuccessful)
-            }
-        })
+        }
     }
 
     fun playPointRecording(recordingId: String, pointNumber: Int, context: Context) {
         recordings[recordingId]?.playPointRecording(pointNumber, context) ?: run {
             Toast.makeText(context, "Recording $recordingId not found", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    fun stopPlayback() {
+        // Delegate to AudioPlaybackManager
+        AudioPlaybackManager.getInstance().stopPlayback()
     }
 
     fun releaseMediaPlayer() {
@@ -382,8 +366,172 @@ object RecordManager {
 
         alertDialog.show()
     }
-}
 
+
+    fun transferOfflineRecordingToServer(
+        recordingId: String,
+        context: Context,
+        onProgress: (Int) -> Unit,
+        onComplete: (Boolean) -> Unit
+    ) {
+        Log.d("RecordManager", "Starting transfer of offline recording: $recordingId")
+
+        // Validate recording exists
+        val recording = recordings[recordingId]
+        if (recording == null) {
+            Log.e("RecordManager", "Recording not found: $recordingId")
+            onComplete(false)
+            return
+        }
+
+        // Must be in online mode to transfer
+        if (!AppConfig.online) {
+            Log.e("RecordManager", "Cannot transfer recording: device is offline")
+            onComplete(false)
+            return
+        }
+
+        // Get all recorded points with files
+        val pointsWithFiles = recording.points.values.filter { it.isRecorded && it.fileName != null }
+        if (pointsWithFiles.isEmpty()) {
+            Log.w("RecordManager", "No files to transfer for recording: $recordingId")
+            onComplete(true) // Consider this a success since there's nothing to do
+            return
+        }
+
+        // Execute transfer in background thread
+        Thread {
+            try {
+                // Step 1: Register the recording ID with server
+                onProgress(5)
+                val idRegistered = runBlocking { registerIdWithServer(recordingId, AppConfig.numChunks) }
+                if (!idRegistered) {
+                    Log.e("RecordManager", "Failed to register recording ID with server")
+                    Handler(Looper.getMainLooper()).post { onComplete(false) }
+                    return@Thread
+                }
+
+                // Step 2: Upload each file
+                var successCount = 0
+                val totalFiles = pointsWithFiles.size
+
+                for ((index, point) in pointsWithFiles.withIndex()) {
+                    val fileName = point.fileName ?: continue
+                    val localFile = File(context.filesDir, fileName)
+
+                    if (!localFile.exists()) {
+                        Log.w("RecordManager", "Local file not found: ${localFile.absolutePath}")
+                        continue
+                    }
+
+                    // Calculate progress (10-90%, reserving beginning and end for registration and label sync)
+                    val progress = 10 + (index * 80 / totalFiles)
+                    Handler(Looper.getMainLooper()).post { onProgress(progress) }
+
+                    // Create server filename that follows the server's convention
+                    // Typically point number followed by .wav
+                    val pointNumber = point.pointNumber
+                    val serverFileName = "$pointNumber.wav"
+
+                    // Upload the file using ServerApi
+                    val fileUploaded = uploadFileToServer(localFile, recordingId, serverFileName, context)
+
+                    if (fileUploaded) {
+                        // Update the point with the server filename
+                        point.fileName = serverFileName
+                        successCount++
+                        Log.d("RecordManager", "Successfully uploaded file $serverFileName for point $pointNumber")
+                    } else {
+                        Log.e("RecordManager", "Failed to upload file for point $pointNumber")
+                    }
+                }
+
+                // Step 3: Sync labels if any files were uploaded
+                if (successCount > 0) {
+                    onProgress(95)
+                    recording.syncLabelsWithServer(context)
+                }
+
+                // Complete with success if at least one file was uploaded
+                val transferSuccess = successCount > 0
+                Log.d("RecordManager", "Transfer completed: $successCount/$totalFiles files uploaded")
+
+                Handler(Looper.getMainLooper()).post {
+                    onProgress(100)
+                    onComplete(transferSuccess)
+                }
+
+            } catch (e: Exception) {
+                Log.e("RecordManager", "Error transferring recording", e)
+                Handler(Looper.getMainLooper()).post { onComplete(false) }
+            }
+        }.start()
+    }
+
+    /**
+     * Uploads a local file to the server using ServerApi
+     * @return true if upload was successful
+     */
+    private fun uploadFileToServer(file: File, recordingId: String, serverFileName: String, context: Context): Boolean {
+        try {
+            Log.d("RecordManager", "Uploading file: ${file.name} to server as $serverFileName")
+
+            // Create a temporary file with the server filename if needed
+            val fileToUpload = if (file.name != serverFileName) {
+                val tempFile = File(context.cacheDir, serverFileName)
+                file.copyTo(tempFile, overwrite = true)
+                tempFile
+            } else {
+                file
+            }
+
+            // Prepare file info for ServerApi
+            val fileInfo = ServerApi.FileInfo(
+                path = fileToUpload.absolutePath,
+                name = serverFileName,
+                mimeType = "audio/wav"
+            )
+
+            // Prepare params for the upload
+            val params = mapOf("folderId" to recordingId)
+
+            // Map of files to upload (field name -> file info)
+            val files = mapOf("file" to fileInfo)
+
+            // Use ServerApi.postSync for the file upload
+            val result = ServerApi.postSync(
+                route = "/upload_file",
+                params = params,
+                files = files,
+                context = context
+            )
+
+            // Clean up temp file if created
+            if (file.name != serverFileName) {
+                try {
+                    File(context.cacheDir, serverFileName).delete()
+                } catch (e: Exception) {
+                    Log.e("RecordManager", "Error cleaning up temp file", e)
+                }
+            }
+
+            return when (result) {
+                is ServerApi.ApiResult.Success -> {
+                    Log.d("RecordManager", "File upload successful: $serverFileName")
+                    true
+                }
+                is ServerApi.ApiResult.Error -> {
+                    Log.e("RecordManager", "File upload failed: ${result.message}")
+                    false
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("RecordManager", "Error uploading file", e)
+            return false
+        }
+    }
+    // Add method to sync all labels with server
+}
 
 
 
