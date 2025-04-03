@@ -23,7 +23,7 @@ import org.json.JSONObject
 import java.io.File
 
 object RecordManager {
-    private val recordings = mutableMapOf<String, Recording>()
+    val recordings = mutableMapOf<String, Recording>()
     private var applicationContext: Context? = null
 
     // Initialize with application context
@@ -164,22 +164,23 @@ object RecordManager {
         return record.getButtonColor()
     }
 
-    fun deleteRecordingSync(id: String, context: Context): Boolean {
-        val recording = recordings[id] ?: return false
+    fun deleteRecordingFromServer(recordingId: String, context: Context): Boolean {
+        Log.d("RecordManager", "Deleting recording from server: $recordingId")
 
-        return if (AppConfig.online) {
-            // For online mode, use ServerApi
-            Log.d("RecordManager", "Deleting recording from server: $id")
+        if (!AppConfig.online) {
+            Log.e("RecordManager", "Cannot delete from server in offline mode")
+            return false
+        }
 
+        try {
             // Use the URL with query parameter
-            val url = "/delete_record_folder?record_id=$id"
+            val url = "/delete_record_folder?record_id=$recordingId"
             val result = ServerApi.getSync(url, context = context)
 
-            when (result) {
+            return when (result) {
                 is ServerApi.ApiResult.Success -> {
-                    // Server deletion successful, remove from local storage
-                    recordings.remove(id)
-                    Log.d("RecordManager", "Successfully deleted recording from server: $id")
+                    // Server deletion successful
+                    Log.d("RecordManager", "Successfully deleted recording from server: $recordingId")
                     true
                 }
                 is ServerApi.ApiResult.Error -> {
@@ -188,17 +189,64 @@ object RecordManager {
                 }
                 else -> false
             }
-        } else {
-            // Offline mode - delete local files
-            Log.d("RecordManager", "Deleting recording in offline mode: $id")
+        } catch (e: Exception) {
+            Log.e("RecordManager", "Exception deleting recording from server", e)
+            return false
+        }
+    }
 
-            try {
-                // Get all points with files
-                val pointsWithFiles = recording.points.values.filter { it.fileName != null }
-                Log.d("RecordManager", "Found ${pointsWithFiles.size} files to delete for recording $id")
+    /**
+     * Deletes a recording locally
+     * @param recordingId The ID of the recording to delete
+     * @param pointNumber The specific point to delete, or null to delete all points
+     * @param context The context to use for operations
+     * @return true if deletion was successful
+     */
+    fun deleteRecordingLocally(recordingId: String, pointNumber: Int? = null, context: Context): Boolean {
+        try {
+            val recording = recordings[recordingId]
+            if (recording == null) {
+                Log.e("RecordManager", "Recording not found for deletion: $recordingId")
+                return false
+            }
 
+            if (pointNumber != null) {
+                // Delete a specific point
+                val point = recording.getPointRecord(pointNumber)
+                if (point == null) {
+                    Log.e("RecordManager", "Point not found for deletion: $pointNumber")
+                    return false
+                }
+
+                val fileName = point.fileName
+                if (fileName == null) {
+                    Log.d("RecordManager", "No file to delete for point $pointNumber")
+                    // Reset state even if no file exists
+                    point.reset()
+                    return true
+                }
+
+                // Delete the file
+                val file = File(context.filesDir, fileName)
+                val success = if (file.exists()) file.delete() else true
+
+                if (success) {
+                    // Reset point state after successful deletion
+                    point.reset()
+                    Log.d("RecordManager", "Successfully deleted local file for point $pointNumber")
+                } else {
+                    Log.e("RecordManager", "Failed to delete local file for point $pointNumber")
+                }
+
+                return success
+            } else {
+                // Delete all points
                 var hasErrors = false
                 var deletedCount = 0
+
+                // Get all points with files
+                val pointsWithFiles = recording.points.values.filter { it.fileName != null }
+                Log.d("RecordManager", "Found ${pointsWithFiles.size} files to delete for recording $recordingId")
 
                 // Delete each file individually
                 for (point in pointsWithFiles) {
@@ -210,6 +258,7 @@ object RecordManager {
                             val success = file.delete()
                             if (success) {
                                 deletedCount++
+                                point.reset()
                                 Log.d("RecordManager", "Successfully deleted file: $fileName")
                             } else {
                                 hasErrors = true
@@ -219,6 +268,7 @@ object RecordManager {
                             Log.w("RecordManager", "File doesn't exist: $fileName")
                             // Count as deleted if it doesn't exist
                             deletedCount++
+                            point.reset()
                         }
                     } catch (e: Exception) {
                         hasErrors = true
@@ -227,19 +277,50 @@ object RecordManager {
                 }
 
                 // Consider success if we deleted at least some files or if there were no files
-                val success = !hasErrors || (pointsWithFiles.isEmpty()) || (deletedCount > 0)
-
-                if (success) {
-                    recordings.remove(id)
-                    Log.d("RecordManager", "Successfully deleted recording locally: $id")
-                }
-
-                success
-            } catch (e: Exception) {
-                Log.e("RecordManager", "Error in offline deletion", e)
-                false
+                return !hasErrors || (pointsWithFiles.isEmpty()) || (deletedCount > 0)
             }
+        } catch (e: Exception) {
+            Log.e("RecordManager", "Error deleting recording locally", e)
+            return false
         }
+    }
+
+    /**
+     * Deletes a recording (either from server or locally based on online mode)
+     * @param id The ID of the recording to delete
+     * @param context The context to use for operations
+     * @return true if deletion was successful
+     */
+    fun deleteRecordingSync(id: String, context: Context): Boolean {
+        val recording = recordings[id] ?: return false
+
+        return if (AppConfig.online) {
+            // For online mode, use server API
+            val success = deleteRecordingFromServer(id, context)
+
+            if (success) {
+                // If server deletion was successful, also remove local files
+                deleteRecordingLocally(id, null, context)
+                recordings.remove(id)
+            }
+
+            success
+        } else {
+            // Offline mode - delete local files only
+            val success = deleteRecordingLocally(id, null, context)
+
+            if (success) {
+                recordings.remove(id)
+            }
+
+            success
+        }
+    }
+
+    // Add this function to RecordManager
+    fun removeRecordingFromList(recordingId: String) {
+        recordings.remove(recordingId)
+        Log.d("RecordManager", "Removed recording $recordingId from list")
     }
 
     fun setRemoteFileName(recordingId: String, pointNumber: Int, filename: String) {
@@ -410,9 +491,10 @@ object RecordManager {
                     return@Thread
                 }
 
-                // Step 2: Upload each file
+                // Step 2: Upload each file individually
                 var successCount = 0
                 val totalFiles = pointsWithFiles.size
+                val successfulPoints = mutableListOf<Int>()
 
                 for ((index, point) in pointsWithFiles.withIndex()) {
                     val fileName = point.fileName ?: continue
@@ -423,32 +505,36 @@ object RecordManager {
                         continue
                     }
 
-                    // Calculate progress (10-90%, reserving beginning and end for registration and label sync)
-                    val progress = 10 + (index * 80 / totalFiles)
+                    // Calculate progress
+                    val progress = 10 + (index * 70 / totalFiles)
                     Handler(Looper.getMainLooper()).post { onProgress(progress) }
 
-                    // Create server filename that follows the server's convention
-                    // Typically point number followed by .wav
+                    // Use the point number as the server filename
                     val pointNumber = point.pointNumber
-                    val serverFileName = "$pointNumber.wav"
+                    val serverFileName = "$recordingId$pointNumber.wav"
 
                     // Upload the file using ServerApi
-                    val fileUploaded = uploadFileToServer(localFile, recordingId, serverFileName, context)
+                    val fileUploaded = uploadFileToServer(localFile, recordingId, serverFileName, pointNumber, context)
 
                     if (fileUploaded) {
-                        // Update the point with the server filename
-                        point.fileName = serverFileName
                         successCount++
-                        Log.d("RecordManager", "Successfully uploaded file $serverFileName for point $pointNumber")
+                        successfulPoints.add(pointNumber)
+                        Log.d("RecordManager", "Successfully uploaded file for point $pointNumber")
                     } else {
                         Log.e("RecordManager", "Failed to upload file for point $pointNumber")
                     }
                 }
 
-                // Step 3: Sync labels if any files were uploaded
+                // Step 3: Delete local files for successfully transferred points
                 if (successCount > 0) {
-                    onProgress(95)
-                    recording.syncLabelsWithServer(context)
+                    Handler(Looper.getMainLooper()).post { onProgress(85) }
+
+                    // Delete local files for each successfully transferred point
+                    for (pointNumber in successfulPoints) {
+                        deleteRecordingLocally(recordingId, pointNumber, context)
+                    }
+                    recordings.remove(recordingId)
+                    Log.d("RecordManager", "Deleted local files for ${successfulPoints.size} points")
                 }
 
                 // Complete with success if at least one file was uploaded
@@ -467,86 +553,93 @@ object RecordManager {
         }.start()
     }
 
-    /**
-     * Uploads a local file to the server using ServerApi
-     * @return true if upload was successful
-     */
-    /**
-     * Uploads a local file to the server using ServerApi
-     * @return true if upload was successful
-     */
-    private fun uploadFileToServer(file: File, recordingId: String, serverFileName: String, context: Context): Boolean {
+
+    private fun uploadFileToServer(file: File, recordingId: String, serverFileName: String, pointNumber: Int, context: Context): Boolean {
         try {
             Log.d("RecordManager", "Uploading file: ${file.name} to server as $serverFileName")
 
-            // Extract the point number from the server filename
-            val pointNumber = serverFileName.replace(".wav", "").toIntOrNull() ?: run {
-                // Alternative extraction for different filename formats
-                val match = "\\d+".toRegex().find(serverFileName)?.value?.toIntOrNull()
-                match ?: return false
+            // Get the point record to update
+            val recording = recordings[recordingId]
+            val pointRecord = recording?.getPointRecord(pointNumber)
+
+            if (pointRecord == null) {
+                Log.e("RecordManager", "Point record not found for point $pointNumber")
+                return false
             }
 
-            // Generate a point record ID for the server
-            // This should match how your server validates it
-            val pointRecordId = "$recordingId-$pointNumber" // Adjust this format if needed
+            // Store the original label
+            val originalLabel = pointRecord.label
+
+            // Create a temporary file with server-compatible name if needed
+            val tempFile = File(context.cacheDir, serverFileName)
+            file.copyTo(tempFile, overwrite = true)
 
             // Prepare file info for ServerApi
             val fileInfo = ServerApi.FileInfo(
-                path = file.absolutePath,
-                name = file.name, // Keep original name as file.filename for upload
+                path = tempFile.absolutePath,
+                name = serverFileName, // Keep the server filename
                 mimeType = "audio/wav"
             )
 
-            // Prepare params for the upload according to the server endpoint
+            // Prepare params for the upload using upload_file route
             val params = mapOf(
-                "record_id" to recordingId,
                 "button_number" to pointNumber.toString(),
-                "pointRecordId" to pointRecordId
+                "record_id" to recordingId,
+                "pointRecordId" to recordingId // Using recordingId as pointRecordId for simplicity
             )
 
-            // Map of files to upload (field name -> file info)
+            // Map of files to upload
             val files = mapOf("file" to fileInfo)
 
-            // Use ServerApi.postSync for the file upload
-            val result = ServerApi.postSync(
-                route = "/upload_file", // The correct route based on your server
+            // Use ServerApi.postSync for the file upload with the correct route
+            val uploadResult = ServerApi.postSync(
+                route = "/upload_file",  // This is the correct route for direct file uploads
                 params = params,
                 files = files,
                 context = context
             )
 
-            return when (result) {
+            // Clean up temp file
+            tempFile.delete()
+
+            var uploadSuccess = false
+
+            // Process upload result
+            when (uploadResult) {
                 is ServerApi.ApiResult.Success -> {
-                    try {
-                        // Parse the response to check for success
-                        val responseJson = JSONObject(result.data)
+                    // Update point with the new filename
+                    pointRecord.fileName = serverFileName
+                    uploadSuccess = true
 
-                        if (responseJson.has("error")) {
-                            Log.e("RecordManager", "Server returned error: ${responseJson.getString("error")}")
-                            return false
+                    // Now update the label separately
+                    val labelParams = mapOf(serverFileName to originalLabel.toString().lowercase())
+                    val labelUrl = "/update_labels?folderId=$recordingId"
+
+                    // Update label on server
+                    val labelResult = ServerApi.postJsonSync(labelUrl, labelParams, context)
+                    when (labelResult) {
+                        is ServerApi.ApiResult.Success -> {
+                            Log.d("RecordManager", "Label updated for $serverFileName")
                         }
-
-                        val message = responseJson.optString("message", "")
-                        val returnedFilename = responseJson.optString("filename", "")
-
-                        Log.d("RecordManager", "File upload successful: $returnedFilename, message: $message")
-                        return true
-                    } catch (e: Exception) {
-                        Log.e("RecordManager", "Error parsing upload response", e)
-                        return false
+                        is ServerApi.ApiResult.Error -> {
+                            Log.e("RecordManager", "Failed to update label: ${labelResult.message}")
+                        }
                     }
+
+                    Log.d("RecordManager", "File upload successful: $serverFileName")
                 }
                 is ServerApi.ApiResult.Error -> {
-                    Log.e("RecordManager", "File upload failed: ${result.message}")
-                    return false
+                    Log.e("RecordManager", "File upload failed: ${uploadResult.message}")
                 }
             }
+
+            return uploadSuccess
+
         } catch (e: Exception) {
             Log.e("RecordManager", "Error uploading file", e)
             return false
         }
     }
-    // Add method to sync all labels with server
 }
 
 

@@ -247,7 +247,16 @@ data class Recording(
     }
 
     fun generateFileName(pointNumber: Int): String {
-        val fileName = "offline_audio_rec_${id}_point_${pointNumber}_${System.currentTimeMillis()}.wav"
+        // Use a consistent naming pattern for both online and offline
+        // Offline files still have the offline_ prefix for identification
+        val fileName = if (AppConfig.online) {
+            // For online mode, use simple numeric filenames as expected by the server
+            "$pointNumber.wav"
+        } else {
+            // For offline mode, include more info but in a structured way
+            "offline_audio_rec_${id}_point_${pointNumber}_${System.currentTimeMillis()}.wav"
+        }
+
         points[pointNumber]?.fileName = fileName
         return fileName
     }
@@ -319,13 +328,20 @@ data class Recording(
                 // Create the label data map for all points in the recording
                 val labels = points.values
                     .filter { it.isRecorded && it.fileName != null }
-                    .associate { point -> point.fileName!! to point.label.toString().lowercase() }
+                    .associate { point ->
+                        // Always use the exact filename stored in the point
+                        // This ensures we're sending the correct key that server expects
+                        point.fileName!! to point.label.toString().lowercase()
+                    }
 
                 // Skip if no labeled points to sync
                 if (labels.isEmpty()) {
                     Log.d("Recording", "No labels to sync with server")
                     return@Thread
                 }
+
+                // Log what we're sending for debugging
+                Log.d("Recording", "Syncing labels to server: $labels")
 
                 // Correctly include the folderId as a URL parameter
                 val url = "/update_labels?folderId=$id"

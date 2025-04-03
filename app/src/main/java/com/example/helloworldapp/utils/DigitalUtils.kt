@@ -14,6 +14,14 @@ import com.example.helloworldapp.ShowQrActivity
 import com.example.helloworldapp.data.RecordManager
 
 object DialogUtils {
+
+    private fun navigateToQrActivity(activity: AppCompatActivity, recordId: String) {
+        val intent = Intent(activity, ShowQrActivity::class.java).apply {
+            putExtra("UNIQUE_ID", recordId)
+        }
+        activity.startActivity(intent)
+        activity.finish()
+    }
     fun showSaveOptionsDialog(activity: AppCompatActivity, recordId: String?) {
         val dialogView = activity.layoutInflater.inflate(R.layout.dialog_confirmation, null)
         val dialog = AlertDialog.Builder(activity)
@@ -44,13 +52,12 @@ object DialogUtils {
                             it.isRecorded && it.fileName != null && it.fileName!!.startsWith("offline_")
                         } ?: false
 
-                        if (hasOfflineFiles) {
-                            // Update progress dialog message
+                        if (hasOfflineFiles && recordId != null) {
+                            // We have an offline recording to transfer and recordId is not null
                             progressDialog.setMessage("Transferring offline recording to server...")
 
-                            // Transfer the recording
                             RecordManager.transferOfflineRecordingToServer(
-                                recordingId = recordId!!,
+                                recordingId = recordId,
                                 context = activity,
                                 onProgress = { progress ->
                                     activity.runOnUiThread {
@@ -67,26 +74,23 @@ object DialogUtils {
                                             val intent = Intent(activity, ShowQrActivity::class.java).apply {
                                                 putExtra("UNIQUE_ID", recordId)
                                             }
+                                            RecordManager.removeRecordingFromList(recordId)
                                             activity.startActivity(intent)
                                             activity.finish()
                                         } else {
                                             // Show error message
                                             Toast.makeText(activity, "Failed to transfer recording to server", Toast.LENGTH_LONG).show()
 
-                                            // Ask if user wants to try again or proceed anyway
+                                            // Ask if user wants to try again or go back
                                             AlertDialog.Builder(activity)
                                                 .setTitle("Transfer Failed")
-                                                .setMessage("Would you like to try again or proceed to viewing the QR code?")
+                                                .setMessage("Would you like to try again or return to the previous screen?")
                                                 .setPositiveButton("Try Again") { _, _ ->
                                                     // Re-click the button to restart the process
                                                     dialogView.findViewById<Button>(R.id.btnSaveOnServer).performClick()
                                                 }
-                                                .setNegativeButton("Proceed Anyway") { _, _ ->
-                                                    val intent = Intent(activity, ShowQrActivity::class.java).apply {
-                                                        putExtra("UNIQUE_ID", recordId)
-                                                    }
-                                                    activity.startActivity(intent)
-                                                    activity.finish()
+                                                .setNegativeButton("Go Back") { _, _ ->
+                                                    // Do nothing, dialog already dismissed
                                                 }
                                                 .setCancelable(false)
                                                 .show()
@@ -95,13 +99,19 @@ object DialogUtils {
                                 }
                             )
                         } else {
-                            // No transfer needed, proceed to QR code display
+                            // No transfer needed or recordId is null
                             progressDialog.dismiss()
-                            val intent = Intent(activity, ShowQrActivity::class.java).apply {
-                                putExtra("UNIQUE_ID", recordId)
+
+                            if (recordId != null) {
+                                val intent = Intent(activity, ShowQrActivity::class.java).apply {
+                                    putExtra("UNIQUE_ID", recordId)
+                                }
+                                RecordManager.removeRecordingFromList(recordId)
+                                activity.startActivity(intent)
+                                activity.finish()
+                            } else {
+                                Toast.makeText(activity, "Invalid recording ID", Toast.LENGTH_SHORT).show()
                             }
-                            activity.startActivity(intent)
-                            activity.finish()
                         }
                     } else {
                         // Server is not responsive

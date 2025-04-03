@@ -323,7 +323,11 @@ class RecordActivity : ComponentActivity() {
 
     private fun saveAudioDataLocally(audioData: ByteArray) {
         val pointNumber = buttonNumber.toIntOrNull() ?: 0
+
+        // Get the filename from RecordManager to ensure consistency
         val fileName = RecordManager.getFileName(recordingId, pointNumber)
+
+        // Make sure the filename is stored consistently
         val file = File(filesDir, fileName)
 
         try {
