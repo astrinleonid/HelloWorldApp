@@ -5,10 +5,13 @@ import AppConfig
 import android.app.AlertDialog
 import android.app.ProgressDialog
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.Button
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -42,13 +45,57 @@ class MainActivity : AppCompatActivity() {
                 CoroutineScope(Dispatchers.IO).launch {
                     // Get ID through initializeRecording function which handles fetching/generating
                     val newId = RecordManager.initializeRecording()
-
                     withContext(Dispatchers.Main) {
                         val intent = Intent(this@MainActivity, TakeRecordsActivity::class.java)
                         intent.putExtra("UNIQUE_ID", newId)
                         intent.putExtra(TakeRecordsActivity.EXTRA_VIEW_TYPE, TakeRecordsActivity.VIEW_TYPE_FRONT)
                         startActivity(intent)
                     }
+                }
+            }
+        }
+
+        // Set up the view server recordings button
+        val viewServerRecordingsButton: Button = findViewById(R.id.view_server_recordings_button)
+        viewServerRecordingsButton.setOnClickListener {
+            openServerRecordingsInBrowser()
+        }
+    }
+
+    private fun openServerRecordingsInBrowser() {
+        // First check if we're online and can connect to the server
+        val progressDialog = ProgressDialog(this).apply {
+            setMessage("Checking server connection...")
+            setCancelable(false)
+            show()
+        }
+
+        RecordManager.checkServerResponse { isConnected ->
+            runOnUiThread {
+                progressDialog.dismiss()
+
+                if (isConnected) {
+                    // Server is reachable, open the server recordings page
+                    val serverUrl = "${AppConfig.serverIP}/show_all_records"
+
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(serverUrl))
+                        startActivity(intent)
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error opening browser", e)
+                        Toast.makeText(
+                            this,
+                            "Could not open browser. Server URL: $serverUrl",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                } else {
+                    // Server is not reachable
+                    Toast.makeText(
+                        this,
+                        "Cannot connect to server. Please check your network connection.",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
         }

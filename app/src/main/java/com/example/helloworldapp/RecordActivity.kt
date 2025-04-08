@@ -10,6 +10,8 @@ import android.media.AudioRecord
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.Button
 import android.widget.TextView
@@ -219,17 +221,55 @@ class RecordActivity : ComponentActivity() {
                         Log.d("RecordActivity", "Got point record ID: $pointRecordId")
                     } catch (e: Exception) {
                         Log.e("RecordActivity", "Error parsing point record ID response", e)
+                        handleServerError()
                     }
                 }
                 is ServerApi.ApiResult.Error -> {
                     Log.e("RecordActivity", "Error getting point record ID: ${result.message}")
+
+                    // Check for 400 error code which means record not found
+                    if (result.code == 400) {
+                        Log.e("RecordActivity", "Error 400: Record not found for ID: $recordingId")
+                        handleServerError()
+                    }
                 }
             }
         } catch (e: Exception) {
             Log.e("RecordActivity", "Exception in getRecordingId", e)
+            handleServerError()
         }
     }
 
+    private fun handleServerError() {
+        // Stop recording
+        isRecording = false
+        recording_result = "fail"
+
+        // Post to main thread for UI operations
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(
+                this@RecordActivity,
+                "Recording failed: Record does not exist on server",
+                Toast.LENGTH_LONG
+            ).show()
+
+            // Create intent to restart TakeRecordsActivity
+            val restartIntent = Intent(this@RecordActivity, TakeRecordsActivity::class.java).apply {
+                putExtra("UNIQUE_ID", recordingId)
+                putExtra(
+                    TakeRecordsActivity.EXTRA_VIEW_TYPE,
+                    if (buttonNumber.toIntOrNull() ?: 0 <= 4)
+                        TakeRecordsActivity.VIEW_TYPE_FRONT
+                    else
+                        TakeRecordsActivity.VIEW_TYPE_BACK
+                )
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+
+            startActivity(restartIntent)
+            finish()
+        }
+    }
     private fun sendAudioDataToServer(audioData: ByteArray) {
         // Use ServerApi for file upload
         try {
@@ -273,6 +313,12 @@ class RecordActivity : ComponentActivity() {
                 }
                 is ServerApi.ApiResult.Error -> {
                     Log.e("RecordActivity", "Error uploading audio: ${result.message}")
+
+                    // Check for 402 error code - record not found on server
+                    if (result.code == 402) {
+                        Log.e("RecordActivity", "Error 402: Record does not exist on server")
+                        handleServerError()
+                    }
                 }
             }
         } catch (e: Exception) {

@@ -12,7 +12,7 @@
         android:background="?attr/colorSurface"
         app:title="beta app, server IP 192.168.1.1"
         app:titleTextColor="@android:color/black"
-        app:menu="@menu/menu_main"/>
+        app:menu="@menu/menu_main" />
 
     <FrameLayout
         android:id="@+id/main_content"
@@ -20,7 +20,20 @@
         android:layout_height="match_parent"
         android:layout_marginTop="?attr/actionBarSize">
 
-        <include layout="@layout/content_main"/>
+        <include layout="@layout/content_main" />
+
     </FrameLayout>
+
+    <!-- Server recordings button - positioned at bottom with subtle styling -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/view_server_recordings_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:text="View Server Recordings"
+        android:textSize="12sp"
+        app:cornerRadius="4dp"
+        style="@style/Widget.MaterialComponents.Button.TextButton" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
