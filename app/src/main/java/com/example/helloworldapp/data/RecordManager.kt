@@ -455,10 +455,112 @@ object RecordManager {
         alertDialog.show()
     }
 
-    fun transferAllOfflineRecordingsToServer(
-        context: Context
-    ){
-        /// YOUR CODE HERE
+    fun transferAllOfflineRecordingsToServer(context: Context) {
+        Log.d("RecordManager", "Starting transfer of all offline recordings to server")
+
+        if (!AppConfig.online) {
+            Log.e("RecordManager", "Cannot transfer recordings: device is offline")
+            Toast.makeText(context, "Cannot transfer recordings while offline", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Get all recording IDs
+        val allRecordingIds = recordings.keys.toList()
+
+        if (allRecordingIds.isEmpty()) {
+            Log.d("RecordManager", "No recordings found to transfer")
+            Toast.makeText(context, "No recordings to transfer", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Create progress dialog
+        val progressDialog = ProgressDialog(context).apply {
+            setTitle("Transferring Recordings")
+            setMessage("Preparing to transfer recordings...")
+            setProgressStyle(ProgressDialog.STYLE_HORIZONTAL)
+            setCancelable(false)
+            max = 100
+            progress = 0
+            show()
+        }
+
+        // Counter for completed transfers
+        val totalRecordings = allRecordingIds.size
+        var completedCount = 0
+        var successCount = 0
+
+        // Execute transfer in background thread
+        Thread {
+            try {
+                for (recordingId in allRecordingIds) {
+                    // Skip the active recording
+                    if (recordingId == currentRecording) {
+                        Log.d("RecordManager", "Skipping active recording: $recordingId")
+                        completedCount++
+                        continue
+                    }
+
+                    // Update progress dialog on main thread
+                    Handler(Looper.getMainLooper()).post {
+                        progressDialog.setMessage("Transferring recording $completedCount of $totalRecordings...")
+                        progressDialog.progress = (completedCount * 100) / totalRecordings
+                    }
+
+                    // Transfer individual recording
+                    transferOfflineRecordingToServer(
+                        recordingId = recordingId,
+                        context = context,
+                        onProgress = { progress ->
+                            // We're using the progress of individual transfer as a sub-progress
+                            // But we don't update the main progress dialog to avoid UI flickering
+                        },
+                        onComplete = { success ->
+                            if (success) {
+                                successCount++
+                                Log.d("RecordManager", "Successfully transferred recording: $recordingId")
+                            } else {
+                                Log.e("RecordManager", "Failed to transfer recording: $recordingId")
+                            }
+
+                            // Count as completed regardless of success
+                            completedCount++
+                        }
+                    )
+
+                    // Small delay to prevent overwhelming the server
+                    Thread.sleep(500)
+                }
+
+                // Wait for all transfers to complete
+                while (completedCount < totalRecordings) {
+                    Thread.sleep(100)
+                }
+
+                // Update UI on main thread with final result
+                Handler(Looper.getMainLooper()).post {
+                    progressDialog.dismiss()
+
+                    // Show completion message
+                    val message = if (successCount > 0) {
+                        "Successfully transferred $successCount out of ${totalRecordings - 1} recordings"
+                    } else {
+                        "Failed to transfer any recordings"
+                    }
+
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                    Log.d("RecordManager", "Transfer completed: $successCount/${totalRecordings - 1} recordings transferred")
+                }
+
+            } catch (e: Exception) {
+                Log.e("RecordManager", "Error transferring all recordings", e)
+
+                // Update UI on main thread
+                Handler(Looper.getMainLooper()).post {
+                    progressDialog.dismiss()
+                    Toast.makeText(context, "Error transferring recordings: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
     fun transferOfflineRecordingToServer(
         recordingId: String,
@@ -538,15 +640,23 @@ object RecordManager {
                 }
 
                 // Step 3: Delete local files for successfully transferred points
+                // ONLY if this is not the active recording
                 if (successCount > 0) {
                     Handler(Looper.getMainLooper()).post { onProgress(85) }
 
-                    // Delete local files for each successfully transferred point
-                    for (pointNumber in successfulPoints) {
-                        deleteRecordingLocally(recordingId, pointNumber, context)
+                    // Check if this is the active recording
+                    val isActiveRecording = (recordingId == currentRecording)
+
+                    if (!isActiveRecording) {
+                        // Only delete local files if this is NOT the active recording
+                        for (pointNumber in successfulPoints) {
+                            deleteRecordingLocally(recordingId, pointNumber, context)
+                        }
+                        recordings.remove(recordingId)
+                        Log.d("RecordManager", "Deleted local files for ${successfulPoints.size} points")
+                    } else {
+                        Log.d("RecordManager", "Kept local files for active recording: $recordingId")
                     }
-                    recordings.remove(recordingId)
-                    Log.d("RecordManager", "Deleted local files for ${successfulPoints.size} points")
                 }
 
                 // Complete with success if at least one file was uploaded
@@ -564,7 +674,6 @@ object RecordManager {
             }
         }.start()
     }
-
 
     private fun uploadFileToServer(file: File, recordingId: String, serverFileName: String, pointNumber: Int, context: Context): Boolean {
         try {

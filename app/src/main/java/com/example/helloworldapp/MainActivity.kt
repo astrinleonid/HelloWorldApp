@@ -48,7 +48,6 @@ class MainActivity : AppCompatActivity() {
                     RecordManager.setActive(newId)
                     withContext(Dispatchers.Main) {
                         val intent = Intent(this@MainActivity, TakeRecordsActivity::class.java)
-                        intent.putExtra("UNIQUE_ID", newId)
                         intent.putExtra(TakeRecordsActivity.EXTRA_VIEW_TYPE, TakeRecordsActivity.VIEW_TYPE_FRONT)
                         startActivity(intent)
                     }

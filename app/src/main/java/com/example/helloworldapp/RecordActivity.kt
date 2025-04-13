@@ -51,7 +51,7 @@ class RecordActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_record)
         buttonNumber = intent.getStringExtra("button_number") ?: "0"
-        recordingId = intent.getStringExtra("UNIQUE_ID") ?: "000000"
+        recordingId = RecordManager.getActive()
 
         // Set recording mode string based on AppConfig.online
         recordingModeStr = if (AppConfig.online) "online" else "offline"

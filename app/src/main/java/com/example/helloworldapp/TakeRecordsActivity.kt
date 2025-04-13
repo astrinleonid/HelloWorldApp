@@ -239,7 +239,7 @@ class TakeRecordsActivity : AppCompatActivity() {
 
 
     private fun handleButtonClick(pointNumber: Int) {
-        val recordId = intent.getStringExtra("UNIQUE_ID")
+        //val recordId = intent.getStringExtra("UNIQUE_ID")
 
         // Check if this point already has a recording
         if (recordingId != null && RecordManager.isRecorded(recordingId, pointNumber)) {
@@ -258,7 +258,7 @@ class TakeRecordsActivity : AppCompatActivity() {
     }
 
     private fun updateAllButtons() {
-        val recordId = intent.getStringExtra("UNIQUE_ID") ?: return
+        //val recordId = intent.getStringExtra("UNIQUE_ID") ?: return
         for (i in buttonRange) {
             updateButtonWithOverlay(recordingId, i)
         }
