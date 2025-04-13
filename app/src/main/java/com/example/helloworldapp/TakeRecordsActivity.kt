@@ -42,6 +42,8 @@ class TakeRecordsActivity : AppCompatActivity() {
     private var isBackView: Boolean = false
     private var buttonRange = 1..4
     private var inGridInexCorrector = 1
+    private var recordingId = ""
+
 
     private val getResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         Log.d("TakeRecordsActivity", "============ START RESULT CALLBACK ============")
@@ -50,7 +52,7 @@ class TakeRecordsActivity : AppCompatActivity() {
 
         if (result.resultCode == Activity.RESULT_OK) {
             val buttonNumber = result.data?.getStringExtra("button_number")?.toIntOrNull()
-            val recordingId = intent.getStringExtra("UNIQUE_ID")
+            //val recordingId = intent.getStringExtra("UNIQUE_ID")
 
             Log.d("TakeRecordsActivity", "Button number: $buttonNumber")
             Log.d("TakeRecordsActivity", "Record ID: $recordingId")
@@ -67,6 +69,8 @@ class TakeRecordsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        recordingId = RecordManager.getActive()
 
         isBackView = intent.getStringExtra(EXTRA_VIEW_TYPE) != VIEW_TYPE_FRONT
         if (isBackView)  {
@@ -238,16 +242,16 @@ class TakeRecordsActivity : AppCompatActivity() {
         val recordId = intent.getStringExtra("UNIQUE_ID")
 
         // Check if this point already has a recording
-        if (recordId != null && RecordManager.isRecorded(recordId, pointNumber)) {
+        if (recordingId != null && RecordManager.isRecorded(recordingId, pointNumber)) {
             // Point already recorded - cycle through labels
-            RecordManager.cyclePointLabel(recordId, pointNumber)
+            RecordManager.cyclePointLabel(recordingId, pointNumber)
             updateAllButtons()
         } else {
             // Point not recorded yet - launch recording activity
             Log.e("TakeRecordsActivity", "Launching RecordActivity for button $pointNumber")
             val intent = Intent(this, RecordActivity::class.java).apply {
                 putExtra("button_number", pointNumber.toString())
-                putExtra("UNIQUE_ID", recordId)
+                putExtra("UNIQUE_ID", recordingId)
             }
             getResult.launch(intent)
         }
@@ -256,12 +260,12 @@ class TakeRecordsActivity : AppCompatActivity() {
     private fun updateAllButtons() {
         val recordId = intent.getStringExtra("UNIQUE_ID") ?: return
         for (i in buttonRange) {
-            updateButtonWithOverlay(recordId, i)
+            updateButtonWithOverlay(recordingId, i)
         }
     }
 
     private fun showConfirmationDialog() {
-        DialogUtils.showSaveOptionsDialog(this, intent.getStringExtra("UNIQUE_ID"))
+        DialogUtils.showSaveOptionsDialog(this, recordingId)
     }
 
 

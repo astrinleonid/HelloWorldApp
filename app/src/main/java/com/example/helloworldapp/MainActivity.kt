@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
                 CoroutineScope(Dispatchers.IO).launch {
                     // Get ID through initializeRecording function which handles fetching/generating
                     val newId = RecordManager.initializeRecording()
+                    RecordManager.setActive(newId)
                     withContext(Dispatchers.Main) {
                         val intent = Intent(this@MainActivity, TakeRecordsActivity::class.java)
                         intent.putExtra("UNIQUE_ID", newId)

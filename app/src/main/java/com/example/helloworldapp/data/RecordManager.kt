@@ -25,6 +25,7 @@ import java.io.File
 object RecordManager {
     val recordings = mutableMapOf<String, Recording>()
     private var applicationContext: Context? = null
+    private var currentRecording = ""
 
     // Initialize with application context
     fun initialize(context: Context) {
@@ -51,6 +52,13 @@ object RecordManager {
         return recordingId
     }
 
+    fun setActive(id: String){
+        currentRecording = id
+    }
+
+    fun getActive() : String {
+        return currentRecording
+    }
     private suspend fun registerIdWithServer(recordingId: String, numChunks: Int): Boolean = withContext(Dispatchers.IO) {
         try {
             // Prepare device info for the server
@@ -447,7 +455,11 @@ object RecordManager {
         alertDialog.show()
     }
 
-
+    fun transferAllOfflineRecordingsToServer(
+        context: Context
+    ){
+        /// YOUR CODE HERE
+    }
     fun transferOfflineRecordingToServer(
         recordingId: String,
         context: Context,
