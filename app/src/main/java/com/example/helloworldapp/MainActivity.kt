@@ -15,7 +15,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.helloworldapp.adapters.RecordsAdapter
-import com.example.helloworldapp.components.CustomToolbar
 import com.example.helloworldapp.data.RecordManager
 import com.example.helloworldapp.utils.SettingsUtils
 import kotlinx.coroutines.CoroutineScope
@@ -60,12 +59,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupToolbar() {
-        val toolbar: CustomToolbar = findViewById(R.id.top_app_bar)
-        setSupportActionBar(toolbar)
-        SettingsUtils.updateToolbarTitle(this)
-//        toolbar.setOnlineMode(AppConfig.online)
-    }
 
     private fun openServerRecordingsInBrowser() {
         // First check if we're online and can connect to the server
@@ -108,8 +101,9 @@ class MainActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         recordsAdapter = RecordsAdapter(RecordManager.getAllRecordingIds()) { recordId ->
             // Handle clicking on a record
-            val intent = Intent(this, PlayRecordsActivity::class.java)
-            intent.putExtra("UNIQUE_ID", recordId)
+            RecordManager.setActive(recordId)
+            val intent = Intent(this@MainActivity, TakeRecordsActivity::class.java)
+            intent.putExtra(TakeRecordsActivity.EXTRA_VIEW_TYPE, TakeRecordsActivity.VIEW_TYPE_FRONT)
             startActivity(intent)
         }
         recyclerView.adapter = recordsAdapter
