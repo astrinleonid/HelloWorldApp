@@ -9,6 +9,8 @@
     <color name="white">#FFFFFFFF</color>
 
     <color name="colorPrimary">#6200EE</color>
+    <color name="colorPrimaryDark">#FF3700B3</color>
+
 
 
     <color name="colorNotRecorded">#A792CC</color>
@@ -16,6 +18,9 @@
     <color name="colorPositive">#D06F90</color>
     <color name="colorNegative">#74CF71</color>
     <color name="colorUndetermined">#CCC26C</color>
+
+    <color name="colorOnline">#4CAF50</color> <!-- Green -->
+    <color name="colorOffline">#F44336</color> <!-- Red -->
 
 
 </resources>

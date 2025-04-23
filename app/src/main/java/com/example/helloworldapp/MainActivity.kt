@@ -13,11 +13,11 @@ import android.view.MenuItem
 import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.helloworldapp.adapters.RecordsAdapter
 import com.example.helloworldapp.data.RecordManager
+import com.example.helloworldapp.data.ToolbarManager
 import com.example.helloworldapp.utils.SettingsUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,7 +35,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         RecordManager.initialize(this)
         setContentView(R.layout.activity_main)
-        setupToolbar()
+        ToolbarManager.setupToolbar(this)
         setupRecordsList()
 
         val startButton: Button = findViewById(R.id.start_button)
@@ -116,11 +116,6 @@ class MainActivity : AppCompatActivity() {
 
 
         recyclerView.adapter = recordsAdapter
-    }
-    private fun setupToolbar() {
-        val toolbar: Toolbar = findViewById(R.id.top_app_bar)
-        setSupportActionBar(toolbar)
-        SettingsUtils.updateToolbarTitle(this)
     }
 
     override fun onResume() {

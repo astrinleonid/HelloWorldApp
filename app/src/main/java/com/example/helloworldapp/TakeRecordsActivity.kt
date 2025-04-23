@@ -124,7 +124,7 @@ class TakeRecordsActivity : AppCompatActivity() {
 
 
     private fun setupToolbar() {
-        val toolbar = findViewById<Toolbar>(R.id.toolbar)
+        val toolbar = findViewById<Toolbar>(R.id.top_app_bar)
         setSupportActionBar(toolbar)
 
         // Set title based on view type
