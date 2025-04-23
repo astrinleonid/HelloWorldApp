@@ -1,4 +1,5 @@
 
+
 package com.example.helloworldapp
 
 import AppConfig
@@ -8,22 +9,19 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import android.view.Menu
-import android.view.MenuItem
 import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.helloworldapp.adapters.RecordsAdapter
+import com.example.helloworldapp.components.CustomToolbar
 import com.example.helloworldapp.data.RecordManager
-import com.example.helloworldapp.data.ToolbarManager
 import com.example.helloworldapp.utils.SettingsUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
 
 
 class MainActivity : AppCompatActivity() {
@@ -35,7 +33,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         RecordManager.initialize(this)
         setContentView(R.layout.activity_main)
-        ToolbarManager.setupToolbar(this)
+        setSupportActionBar(findViewById(R.id.top_app_bar))
+        SettingsUtils.updateToolbarTitle(this)
         setupRecordsList()
 
         val startButton: Button = findViewById(R.id.start_button)
@@ -55,11 +54,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Set up the view server recordings button
         val viewServerRecordingsButton: Button = findViewById(R.id.view_server_recordings_button)
         viewServerRecordingsButton.setOnClickListener {
             openServerRecordingsInBrowser()
         }
+    }
+
+    private fun setupToolbar() {
+        val toolbar: CustomToolbar = findViewById(R.id.top_app_bar)
+        setSupportActionBar(toolbar)
+        SettingsUtils.updateToolbarTitle(this)
+//        toolbar.setOnlineMode(AppConfig.online)
     }
 
     private fun openServerRecordingsInBrowser() {
@@ -69,15 +74,12 @@ class MainActivity : AppCompatActivity() {
             setCancelable(false)
             show()
         }
-
         RecordManager.checkServerResponse { isConnected ->
             runOnUiThread {
                 progressDialog.dismiss()
-
                 if (isConnected) {
                     // Server is reachable, open the server recordings page
                     val serverUrl = "${AppConfig.serverIP}/show_all_records"
-
                     try {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(serverUrl))
                         startActivity(intent)
@@ -104,17 +106,12 @@ class MainActivity : AppCompatActivity() {
     private fun setupRecordsList() {
         val recyclerView: RecyclerView = findViewById(R.id.recordsList)
         recyclerView.layoutManager = LinearLayoutManager(this)
-
-
         recordsAdapter = RecordsAdapter(RecordManager.getAllRecordingIds()) { recordId ->
             // Handle clicking on a record
             val intent = Intent(this, PlayRecordsActivity::class.java)
             intent.putExtra("UNIQUE_ID", recordId)
             startActivity(intent)
         }
-
-
-
         recyclerView.adapter = recordsAdapter
     }
 
@@ -124,47 +121,26 @@ class MainActivity : AppCompatActivity() {
         recordsAdapter.notifyDataSetChanged()
     }
 
-    // Inflate the menu
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.menu_main, menu)
-        return true
-    }
-
-    // Handle menu item clicks
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.settings_menu -> {
-                SettingsUtils.showSettingsDialog(this)
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
-        }
-    }
-
     private fun checkServerResponse(callback: (Boolean) -> Unit) {
         // Only try to contact server if in online mode
         if (!AppConfig.online) {
             callback(false)
             return
         }
-
         // Show a progress dialog while checking
         val progressDialog = ProgressDialog(this).apply {
             setMessage("Checking server connection...")
             setCancelable(false)
             show()
         }
-
         // Use ServerApi to check connection
         RecordManager.checkServerResponse { isConnected ->
             progressDialog.dismiss()
-
             if (!isConnected && AppConfig.online) {
                 // Server is not reachable but app is in online mode
                 // Show the error dialog
                 serverErrorDialog = true
                 showServerErrorDialog()
-
                 // Return failure
                 callback(false)
             } else {
@@ -173,6 +149,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
     private fun showServerErrorDialog() {
         AlertDialog.Builder(this)
             .setTitle("Server Error")
@@ -181,8 +158,3 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 }
-
-
-
-
-
