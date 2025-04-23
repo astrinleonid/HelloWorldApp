@@ -2,15 +2,16 @@ package com.example.helloworldapp.utils
 
 import AppConfig
 import NetworkQualityChecker
-import android.app.AlertDialog
 import android.app.ProgressDialog
 import android.content.Context
 import android.view.LayoutInflater
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.helloworldapp.R
+import com.example.helloworldapp.components.CustomToolbar
 import com.example.helloworldapp.data.RecordManager
 
 object SettingsUtils {
@@ -39,7 +40,7 @@ object SettingsUtils {
                 AppConfig.timeOut = timeoutEdit.text.toString().toIntOrNull() ?: 10
                 AppConfig.numChunks = numChunksEdit.text.toString().toIntOrNull() ?: 5
                 AppConfig.segmentLength = chunkLengthEdit.text.toString().toIntOrNull() ?: 3
-                if (!AppConfig.online and onlineCheckbox.isChecked) {
+                if (!AppConfig.online && onlineCheckbox.isChecked) {
                     val progressDialog = ProgressDialog(context).apply {
                         setMessage("Checking server connection quality...")
                         setCancelable(false)
@@ -50,8 +51,8 @@ object SettingsUtils {
                         "Switching to online mode, checking connection",
                         Toast.LENGTH_SHORT
                     ).show()
-                    var networkQualityChecker = NetworkQualityChecker(context = context)
-                    networkQualityChecker?.checkConnectionQuality(AppConfig.serverIP) { isQualitySufficient ->
+                    val networkQualityChecker = NetworkQualityChecker(context = context)
+                    networkQualityChecker.checkConnectionQuality(AppConfig.serverIP) { isQualitySufficient ->
                         progressDialog.dismiss()
                         if (isQualitySufficient) {
                             AppConfig.online = true
@@ -63,21 +64,24 @@ object SettingsUtils {
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
+                        // Update toolbar title and online indicator after network check
+                        if (context is AppCompatActivity) {
+                            updateToolbarTitle(context)
+                        }
                     }
                 } else {
                     AppConfig.online = onlineCheckbox.isChecked
+                    // Update toolbar title and online indicator immediately
+                    if (context is AppCompatActivity) {
+                        updateToolbarTitle(context)
+                    }
                 }
 
                 Toast.makeText(context, "Settings saved!", Toast.LENGTH_SHORT).show()
-
-                // Update toolbar title after settings have been saved
-                if (context is AppCompatActivity) {
-                    updateToolbarTitle(context)
-                }
             }
             .setNegativeButton("Cancel", null)
             .setOnDismissListener {
-                // Also update toolbar title when dialog is dismissed
+                // Also update toolbar title and online indicator when dialog is dismissed
                 if (context is AppCompatActivity) {
                     updateToolbarTitle(context)
                 }
@@ -93,7 +97,9 @@ object SettingsUtils {
             "App ($modeText)"
         }
         activity.supportActionBar?.title = title
+
+        // Update online/offline indicator
+        val toolbar = activity.findViewById<CustomToolbar>(R.id.top_app_bar)
+        toolbar?.setOnlineMode(AppConfig.online)
     }
-
-
 }

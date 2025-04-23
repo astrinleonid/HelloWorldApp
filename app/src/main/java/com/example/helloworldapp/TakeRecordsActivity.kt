@@ -23,6 +23,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import com.example.helloworldapp.components.CustomToolbar
 import com.example.helloworldapp.data.RecordManager
 import com.example.helloworldapp.utils.DialogUtils
 import com.example.helloworldapp.utils.SettingsUtils
@@ -81,7 +82,8 @@ class TakeRecordsActivity : AppCompatActivity() {
         networkQualityChecker = NetworkQualityChecker(this)
         setContentView(if (isBackView) R.layout.activity_take_records_back else R.layout.activity_take_records_front)
 
-        setupToolbar()
+        setSupportActionBar(findViewById(R.id.top_app_bar))
+        SettingsUtils.updateToolbarTitle(this)
         setupButtons()
         createButtonGrid()
         updateAllButtons()
@@ -124,32 +126,11 @@ class TakeRecordsActivity : AppCompatActivity() {
 
 
     private fun setupToolbar() {
-        val toolbar = findViewById<Toolbar>(R.id.toolbar)
+        val toolbar: CustomToolbar = findViewById(R.id.top_app_bar)
         setSupportActionBar(toolbar)
-
-        // Set title based on view type
-        supportActionBar?.title = ""
-
-        // Remove the playback button if it exists
-        val playbackButton = findViewById<Button>(R.id.playbackButton)
-        playbackButton?.visibility = View.GONE
+        SettingsUtils.updateToolbarTitle(this)
     }
 
-    // Add these methods for the menu
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.menu_main, menu)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.settings_menu -> {
-                SettingsUtils.showSettingsDialog(this)
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
-        }
-    }
 
     private fun setupButtons() {
         // Change from Button to ImageButton
