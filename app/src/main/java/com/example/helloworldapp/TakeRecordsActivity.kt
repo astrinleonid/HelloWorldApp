@@ -112,21 +112,11 @@ class TakeRecordsActivity : AppCompatActivity() {
                 AlertDialog.Builder(this)
                     .setTitle("Switched to Offline Mode")
                     .setMessage("The connection to the server is unstable or slow. The app has automatically switched to offline mode for better reliability.")
-//                    .setPositiveButton("OK") { _, _ -> updateModeDisplay() }
                     .show()
             }
-
-            // Update UI to reflect the mode
-//            updateModeDisplay()
         }
     }
 
-
-    private fun setupToolbar() {
-        val toolbar: CustomToolbar = findViewById(R.id.top_app_bar)
-        setSupportActionBar(toolbar)
-        SettingsUtils.updateToolbarTitle(this)
-    }
 
 
     private fun setupButtons() {

@@ -15,6 +15,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.helloworldapp.adapters.RecordsAdapter
+import com.example.helloworldapp.components.CustomToolbar
 import com.example.helloworldapp.data.RecordManager
 import com.example.helloworldapp.utils.SettingsUtils
 import kotlinx.coroutines.CoroutineScope
@@ -24,16 +25,17 @@ import kotlinx.coroutines.withContext
 
 
 class MainActivity : AppCompatActivity() {
+    private val TAG = "MainActivity"
     private lateinit var recordsAdapter: RecordsAdapter
     private var serverErrorDialog: Boolean = false
     private var uniqueId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(TAG, "onCreate")
         RecordManager.initialize(this)
         setContentView(R.layout.activity_main)
-        setSupportActionBar(findViewById(R.id.top_app_bar))
-        SettingsUtils.updateToolbarTitle(this)
+        setupToolbar()
         setupRecordsList()
 
         val startButton: Button = findViewById(R.id.start_button)
@@ -59,6 +61,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupToolbar() {
+        val toolbar: CustomToolbar = findViewById(R.id.top_app_bar)
+        setSupportActionBar(toolbar)
+        SettingsUtils.updateToolbarTitle(this)
+        toolbar.setOnlineMode(AppConfig.online)
+    }
 
     private fun openServerRecordingsInBrowser() {
         // First check if we're online and can connect to the server
@@ -101,18 +109,32 @@ class MainActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         recordsAdapter = RecordsAdapter(RecordManager.getAllRecordingIds()) { recordId ->
             // Handle clicking on a record
-            RecordManager.setActive(recordId)
-            val intent = Intent(this@MainActivity, TakeRecordsActivity::class.java)
-            intent.putExtra(TakeRecordsActivity.EXTRA_VIEW_TYPE, TakeRecordsActivity.VIEW_TYPE_FRONT)
+            val intent = Intent(this, PlayRecordsActivity::class.java)
+            intent.putExtra("UNIQUE_ID", recordId)
             startActivity(intent)
         }
         recyclerView.adapter = recordsAdapter
     }
 
+    // Public method that can be called to refresh the records list
+    fun refreshRecordsList() {
+        Log.d(TAG, "refreshRecordsList called")
+        if (::recordsAdapter.isInitialized) {
+            val newRecords = RecordManager.getAllRecordingIds()
+            Log.d(TAG, "Got ${newRecords.size} records from RecordManager")
+            recordsAdapter.updateData(newRecords)
+            recordsAdapter.notifyDataSetChanged()
+            Log.d(TAG, "Records list refreshed")
+        } else {
+            Log.e(TAG, "recordsAdapter not initialized!")
+        }
+    }
+
     override fun onResume() {
         super.onResume()
+        Log.d(TAG, "onResume")
         SettingsUtils.updateToolbarTitle(this)
-        recordsAdapter.notifyDataSetChanged()
+        refreshRecordsList()
     }
 
     private fun checkServerResponse(callback: (Boolean) -> Unit) {

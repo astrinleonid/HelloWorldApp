@@ -4,6 +4,7 @@ import AppConfig
 import NetworkQualityChecker
 import android.app.ProgressDialog
 import android.content.Context
+import android.util.Log
 import android.view.LayoutInflater
 import android.widget.CheckBox
 import android.widget.EditText
@@ -15,7 +16,7 @@ import com.example.helloworldapp.components.CustomToolbar
 import com.example.helloworldapp.data.RecordManager
 
 object SettingsUtils {
-
+    private const val TAG = "SettingsUtils"
     /**
      * Shows the settings dialog to the user
      */
@@ -77,6 +78,8 @@ object SettingsUtils {
      * @param callback Optional callback that returns true if switched to online successfully
      */
     fun goOnline(context: Context, callback: ((Boolean) -> Unit)? = null) {
+        Log.d(TAG, "Attempting to go online, current status: ${AppConfig.online}")
+
         val progressDialog = ProgressDialog(context).apply {
             setMessage("Checking server connection quality...")
             setCancelable(false)
@@ -94,8 +97,10 @@ object SettingsUtils {
             progressDialog.dismiss()
 
             if (isQualitySufficient) {
+                val wasOfflineBefore = !AppConfig.online
+                Log.d(TAG, "Connection check successful, wasOfflineBefore: $wasOfflineBefore")
+
                 AppConfig.online = true
-                RecordManager.transferAllOfflineRecordingsToServer(context)
 
                 Toast.makeText(
                     context,
@@ -108,8 +113,24 @@ object SettingsUtils {
                     updateToolbarTitle(context)
                 }
 
-                callback?.invoke(true)
+                // If we were previously offline, transfer recordings to server
+                // and update the list when complete
+                if (wasOfflineBefore) {
+                    Log.d(TAG, "Status changed from offline to online, transferring recordings")
+                    RecordManager.transferAllOfflineRecordingsToServer(context) { transferSuccess ->
+                        // This callback will be invoked after the transfer completes
+                        Log.d(TAG, "Transfer completed with success: $transferSuccess")
+
+                        // Notify original callback
+                        callback?.invoke(true)
+                    }
+                } else {
+                    Log.d(TAG, "Already online, no transfer needed")
+                    callback?.invoke(true)
+                }
             } else {
+                Log.d(TAG, "Connection check failed")
+
                 Toast.makeText(
                     context,
                     "Cannot switch to online mode. Connection quality insufficient.",

@@ -3,6 +3,7 @@ package com.example.helloworldapp.components
 import AppConfig
 import android.content.Context
 import android.util.AttributeSet
+import android.util.Log
 import android.util.TypedValue
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -46,10 +47,15 @@ class CustomToolbar @JvmOverloads constructor(
     private fun toggleOnlineMode(context: Context) {
         if (!AppConfig.online) {
             // Currently offline, try to go online
-            SettingsUtils.goOnline(context)
+            SettingsUtils.goOnline(context) { success ->
+                Log.d("CustomToolbar", "Toggle to online mode result: $success")
+                // The list refresh will be handled by the RecordManager's callback
+            }
         } else {
             // Currently online, go offline
             SettingsUtils.goOffline(context)
+            // For offline mode, we don't need to wait for any background operations
+            Log.d("CustomToolbar", "Toggled to offline mode")
         }
     }
 

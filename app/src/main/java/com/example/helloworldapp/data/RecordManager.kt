@@ -455,12 +455,13 @@ object RecordManager {
         alertDialog.show()
     }
 
-    fun transferAllOfflineRecordingsToServer(context: Context) {
+    fun transferAllOfflineRecordingsToServer(context: Context, onComplete: ((Boolean) -> Unit)? = null) {
         Log.d("RecordManager", "Starting transfer of all offline recordings to server")
 
         if (!AppConfig.online) {
             Log.e("RecordManager", "Cannot transfer recordings: device is offline")
             Toast.makeText(context, "Cannot transfer recordings while offline", Toast.LENGTH_SHORT).show()
+            onComplete?.invoke(false)
             return
         }
 
@@ -470,6 +471,7 @@ object RecordManager {
         if (allRecordingIds.isEmpty()) {
             Log.d("RecordManager", "No recordings found to transfer")
             Toast.makeText(context, "No recordings to transfer", Toast.LENGTH_SHORT).show()
+            onComplete?.invoke(true) // Success but nothing to do
             return
         }
 
@@ -549,6 +551,9 @@ object RecordManager {
 
                     Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                     Log.d("RecordManager", "Transfer completed: $successCount/${totalRecordings - 1} recordings transferred")
+
+                    // Call the completion callback with success if at least one recording was transferred
+                    onComplete?.invoke(successCount > 0)
                 }
 
             } catch (e: Exception) {
@@ -558,6 +563,7 @@ object RecordManager {
                 Handler(Looper.getMainLooper()).post {
                     progressDialog.dismiss()
                     Toast.makeText(context, "Error transferring recordings: ${e.message}", Toast.LENGTH_LONG).show()
+                    onComplete?.invoke(false)
                 }
             }
         }.start()
