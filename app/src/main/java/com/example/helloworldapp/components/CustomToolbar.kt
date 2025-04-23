@@ -1,7 +1,9 @@
 package com.example.helloworldapp.components
 
+import AppConfig
 import android.content.Context
 import android.util.AttributeSet
+import android.util.TypedValue
 import android.widget.ImageButton
 import android.widget.ImageView
 import androidx.appcompat.widget.Toolbar
@@ -26,6 +28,29 @@ class CustomToolbar @JvmOverloads constructor(
             // Show settings dialog
             SettingsUtils.showSettingsDialog(context)
         }
+
+        // Make the status icon clickable to toggle online/offline mode
+        statusIcon.isClickable = true
+        statusIcon.isFocusable = true
+
+        // Add ripple effect for better touch feedback
+        val outValue = TypedValue()
+        context.theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, outValue, true)
+        statusIcon.setBackgroundResource(outValue.resourceId)
+
+        statusIcon.setOnClickListener {
+            toggleOnlineMode(context)
+        }
+    }
+
+    private fun toggleOnlineMode(context: Context) {
+        if (!AppConfig.online) {
+            // Currently offline, try to go online
+            SettingsUtils.goOnline(context)
+        } else {
+            // Currently online, go offline
+            SettingsUtils.goOffline(context)
+        }
     }
 
     fun setOnlineMode(isOnline: Boolean) {
@@ -35,9 +60,9 @@ class CustomToolbar @JvmOverloads constructor(
             else R.drawable.ic_status_offline
         )
 
-        // Optional: Add a content description for accessibility
+        // Add a content description for accessibility
         statusIcon.contentDescription =
-            if (isOnline) "Online"
-            else "Offline"
+            if (isOnline) "Network connected (tap to go offline)"
+            else "Network disconnected (tap to go online)"
     }
 }
