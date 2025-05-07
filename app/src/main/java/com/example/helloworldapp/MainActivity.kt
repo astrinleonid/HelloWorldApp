@@ -109,8 +109,10 @@ class MainActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         recordsAdapter = RecordsAdapter(RecordManager.getAllRecordingIds()) { recordId ->
             // Handle clicking on a record
-            val intent = Intent(this, PlayRecordsActivity::class.java)
-            intent.putExtra("UNIQUE_ID", recordId)
+            RecordManager.setActive(recordId)
+            val intent = Intent(this, TakeRecordsActivity::class.java)
+            intent.putExtra(TakeRecordsActivity.EXTRA_VIEW_TYPE, TakeRecordsActivity.VIEW_TYPE_FRONT)
+//            intent.putExtra("UNIQUE_ID", recordId)
             startActivity(intent)
         }
         recyclerView.adapter = recordsAdapter

@@ -31,7 +31,7 @@ object DialogUtils {
         // 1. Save on server
         dialogView.findViewById<Button>(R.id.btnSaveOnServer).setOnClickListener {
             dialog.dismiss()
-            RecordManager.setActive("")
+            RecordManager.resetActive()
             // Show progress dialog for server checks
             val progressDialog = ProgressDialog(activity).apply {
                 setMessage("Checking server connection...")
@@ -142,7 +142,7 @@ object DialogUtils {
         // 2. Save locally
         dialogView.findViewById<Button>(R.id.btnSaveLocally).setOnClickListener {
             dialog.dismiss()
-            RecordManager.setActive("")
+            RecordManager.resetActive()
             // Set to offline mode explicitly
             AppConfig.online = false
             activity.startActivity(Intent(activity, MainActivity::class.java))
@@ -152,7 +152,7 @@ object DialogUtils {
         // 3. Delete recording
         dialogView.findViewById<Button>(R.id.btnDeleteRecording).setOnClickListener {
             dialog.dismiss()
-            RecordManager.setActive("")
+            RecordManager.resetActive()
             recordId?.let { id ->
                 // Show progress dialog
                 val progressDialog = ProgressDialog(activity).apply {

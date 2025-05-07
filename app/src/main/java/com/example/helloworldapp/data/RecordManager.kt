@@ -19,7 +19,6 @@ import getDeviceIdentifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.io.File
 
 object RecordManager {
@@ -54,6 +53,10 @@ object RecordManager {
 
     fun setActive(id: String){
         currentRecording = id
+    }
+
+    fun resetActive(){
+        currentRecording = ""
     }
 
     fun getActive() : String {
@@ -92,51 +95,51 @@ object RecordManager {
         }
     }
 
-    fun syncWithServer(recordId: String, callback: (Boolean) -> Unit) {
-        if (!AppConfig.online) {
-            callback(true)
-            return
-        }
-
-        // Use the query parameter in the URL
-        val url = "/get_wav_files?folderId=$recordId"
-
-        // Use ServerApi for the request
-        ServerApi.get(url, context = applicationContext) { result ->
-            when (result) {
-                is ServerApi.ApiResult.Success -> {
-                    try {
-                        val jsonData = result.data
-                        val json = JSONObject(jsonData)
-                        val files = json.getString("files").split(" ")
-                        val labels = json.optJSONObject("labels") ?: JSONObject()
-
-                        // Get or create the recording
-                        val recording = recordings[recordId] ?: run {
-                            val newRecording = Recording(recordId)
-                            recordings[recordId] = newRecording
-                            newRecording
-                        }
-
-                        // Process each file to update point records
-                        files.forEach { filename ->
-                            val labelStr = labels.optString(filename, "")
-                            recording.updateFromServerData(filename, labelStr)
-                        }
-                        callback(true)
-                    } catch (e: Exception) {
-                        Log.e("RecordManager", "Error processing server response", e)
-                        callback(false)
-                    }
-                }
-                is ServerApi.ApiResult.Error -> {
-                    Log.e("RecordManager", "Failed to sync with server: ${result.message}")
-                    callback(false)
-                }
-                else -> callback(false)
-            }
-        }
-    }
+//    fun syncWithServer(recordId: String, callback: (Boolean) -> Unit) {
+//        if (!AppConfig.online) {
+//            callback(true)
+//            return
+//        }
+//
+//        // Use the query parameter in the URL
+//        val url = "/get_wav_files?folderId=$recordId"
+//
+//        // Use ServerApi for the request
+//        ServerApi.get(url, context = applicationContext) { result ->
+//            when (result) {
+//                is ServerApi.ApiResult.Success -> {
+//                    try {
+//                        val jsonData = result.data
+//                        val json = JSONObject(jsonData)
+//                        val files = json.getString("files").split(" ")
+//                        val labels = json.optJSONObject("labels") ?: JSONObject()
+//
+//                        // Get or create the recording
+//                        val recording = recordings[recordId] ?: run {
+//                            val newRecording = Recording(recordId)
+//                            recordings[recordId] = newRecording
+//                            newRecording
+//                        }
+//
+//                        // Process each file to update point records
+//                        files.forEach { filename ->
+//                            val labelStr = labels.optString(filename, "")
+//                            recording.updateFromServerData(filename, labelStr)
+//                        }
+//                        callback(true)
+//                    } catch (e: Exception) {
+//                        Log.e("RecordManager", "Error processing server response", e)
+//                        callback(false)
+//                    }
+//                }
+//                is ServerApi.ApiResult.Error -> {
+//                    Log.e("RecordManager", "Failed to sync with server: ${result.message}")
+//                    callback(false)
+//                }
+//                else -> callback(false)
+//            }
+//        }
+//    }
 
     fun getAllPointRecords(recordId: String): Map<Int, PointRecord>? {
         return recordings[recordId]?.points
