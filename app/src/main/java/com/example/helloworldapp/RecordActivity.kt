@@ -328,10 +328,13 @@ class RecordActivity : ComponentActivity() {
 
     private fun sendSaveCommandToServer(result: String, buttonNumber: String) {
         // Use ServerApi instead of direct OkHttp
+
+        val filename = RecordManager.generateFilename(recordingId, buttonNumber)
         val params = mapOf(
             "result" to result,
             "button_number" to buttonNumber,
-            "record_id" to recordingId
+            "record_id" to recordingId,
+            "filename" to filename
         )
 
         try {
@@ -342,15 +345,15 @@ class RecordActivity : ComponentActivity() {
                 is ServerApi.ApiResult.Success -> {
                     try {
                         val jsonObject = JSONObject(apiResult.data)
-                        val filename = jsonObject.optString("filename", null)
+//                        val filename = jsonObject.optString("filename", null)
 
                         if (!filename.isNullOrEmpty()) {
-                            Log.d("RecordActivity", "Received filename from server: $filename")
+//                            Log.d("RecordActivity", "Received filename from server: $filename")
 
                             // Store the filename in RecordManager
                             val pointNumber = buttonNumber.toIntOrNull() ?: 0
-                            RecordManager.setRemoteFileName(recordingId, pointNumber, filename)
-                            RecordManager.setPointRecorded(recordingId, pointNumber)
+                            RecordManager.setFileName(recordingId, pointNumber, filename)
+//                            RecordManager.setPointRecorded(recordingId, pointNumber)
                         } else {
                             Log.e("RecordActivity", "No filename received from server")
                         }
@@ -370,15 +373,13 @@ class RecordActivity : ComponentActivity() {
     private fun saveAudioDataLocally(audioData: ByteArray) {
         val pointNumber = buttonNumber.toIntOrNull() ?: 0
 
-        // Get the filename from RecordManager to ensure consistency
-        val fileName = RecordManager.getFileName(recordingId, pointNumber)
-
-        // Make sure the filename is stored consistently
-        val file = File(filesDir, fileName)
-
         try {
+            // Get the filename from RecordManager to ensure consistency
+            val fileName = RecordManager.generateFilename(recordingId, "$pointNumber")
+            RecordManager.setFileName(recordingId, pointNumber, fileName)
+            // Make sure the filename is stored consistently
+            val file = File(filesDir, fileName)
             file.writeBytes(audioData)
-
             // Update RecordManager with recording information
             RecordManager.setPointRecorded(recordingId, pointNumber)
 

@@ -5,10 +5,8 @@ import android.content.Context
 import android.util.Log
 import android.widget.Toast
 import com.example.helloworldapp.R
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import java.io.File
 
 
@@ -234,44 +232,36 @@ data class Recording(
         return points[pointNumber]?.isRecorded ?: false
     }
 
-    fun setPointLabel(pointNumber: Int, label: RecordLabel) {
-        points[pointNumber]?.updateLabel(label)
-    }
 
-    fun cyclePointLabel(pointNumber: Int, context: Context? = null): RecordLabel? {
-        return points[pointNumber]?.cycleLabel(id, context)
-    }
+//    fun generateFileName(pointNumber: Int): String {
+//        if (!AppConfig.online) {
+//            val fileName = "offline_audio_rec_${id}_point_${pointNumber}_${System.currentTimeMillis()}.wav"
+//            points[pointNumber]?.fileName = fileName
+//            return fileName
+//        } else {
+//            Log.e("PointRecord", "Trying to generate a filename in online mode, get filename from the server instead")
+//            return ""
+//        }
+//    }
 
-    fun getFileName(pointNumber: Int): String? {
-        return points[pointNumber]?.fileName
-    }
-
-    fun generateFileName(pointNumber: Int): String {
-        // Use a consistent naming pattern for both online and offline
-        // Offline files still have the offline_ prefix for identification
-        val fileName = if (AppConfig.online) {
-            // For online mode, use simple numeric filenames as expected by the server
-            "$pointNumber.wav"
-        } else {
-            // For offline mode, include more info but in a structured way
-            "offline_audio_rec_${id}_point_${pointNumber}_${System.currentTimeMillis()}.wav"
-        }
-
-        points[pointNumber]?.fileName = fileName
-        return fileName
-    }
-
-    fun setPointRecorded(pointNumber: Int) {
-        points[pointNumber]?.markAsRecorded()
-    }
-
-    fun setRemoteFileName(pointNumber: Int, filename: String) {
+    fun setFileName(pointNumber: Int, filename: String) {
         points[pointNumber]?.let { point ->
             point.fileName = filename
             point.isRecorded = true
             Log.d("Recording", "Set remote filename for recordingId=$id, point=$pointNumber: $filename")
         }
     }
+
+    fun getFileName(pointNumber: Int) : String? {
+        val point = points[pointNumber]?: throw IllegalStateException("Point $pointNumber does not exist")
+        return point.fileName
+    }
+
+    fun setPointRecorded(pointNumber: Int) {
+        points[pointNumber]?.markAsRecorded()
+    }
+
+
 
     fun resetPoint(pointNumber: Int, context: Context): Boolean {
         Log.d("Recording", "resetPoint called for recording: $id, point: $pointNumber")
@@ -302,133 +292,5 @@ data class Recording(
         }
     }
 
-    fun updateFromServerData(filename: String, labelStr: String) {
-        val pointNumber = extractPointNumber(filename) ?: return
 
-        points[pointNumber]?.let { point ->
-            // Mark as recorded and store filename
-            point.isRecorded = true
-            point.fileName = filename
-
-            // Update label if present
-            point.label = when(labelStr.lowercase()) {
-                "positive" -> RecordLabel.POSITIVE
-                "negative" -> RecordLabel.NEGATIVE
-                "undetermined" -> RecordLabel.UNDETERMINED
-                else -> RecordLabel.NOLABEL
-            }
-        }
-    }
-    fun syncLabelsWithServer(context: Context) {
-        if (!AppConfig.online) return
-
-        // Use a background thread for the network operation
-        Thread {
-            try {
-                // Create the label data map for all points in the recording
-                val labels = points.values
-                    .filter { it.isRecorded && it.fileName != null }
-                    .associate { point ->
-                        // Always use the exact filename stored in the point
-                        // This ensures we're sending the correct key that server expects
-                        point.fileName!! to point.label.toString().lowercase()
-                    }
-
-                // Skip if no labeled points to sync
-                if (labels.isEmpty()) {
-                    Log.d("Recording", "No labels to sync with server")
-                    return@Thread
-                }
-
-                // Log what we're sending for debugging
-                Log.d("Recording", "Syncing labels to server: $labels")
-
-                // Correctly include the folderId as a URL parameter
-                val url = "/update_labels?folderId=$id"
-
-                // Use the generic postJson method from ServerApi with the URL including parameters
-                val result = ServerApi.postJsonSync(url, labels, context)
-
-                when (result) {
-                    is ServerApi.ApiResult.Success -> {
-                        Log.d("Recording", "Labels updated successfully on server")
-                    }
-                    is ServerApi.ApiResult.Error -> {
-                        Log.e("Recording", "Failed to update labels on server: ${result.message}")
-                    }
-                    else -> {}
-                }
-            } catch (e: Exception) {
-                Log.e("Recording", "Error updating labels on server", e)
-            }
-        }.start()
-    }
-
-    private fun extractPointNumber(filename: String): Int? {
-        return if (AppConfig.online) {
-            val match = Regex("""(\d+)\.wav$""").find(filename)
-            match?.groupValues?.get(1)?.toIntOrNull()
-        } else {
-            filename.substringAfter("point_")
-                .substringBefore("_")
-                .toIntOrNull()
-        }
-    }
-
-    fun deleteAllFiles(context: Context): Pair<Boolean, Int> {
-        // For online mode, we should use the server endpoint to delete the entire folder
-        if (AppConfig.online) {
-            return deleteEntireFolderFromServer(context)
-        } else {
-            // Original code for offline mode
-            var hasErrors = false
-            var deletedCount = 0
-
-            // Delete each file associated with points
-            points.values.forEach { point ->
-                if (point.fileName != null) {
-                    val success = point.deleteFile(context, id)
-                    if (!success) hasErrors = true
-                    deletedCount++
-                }
-            }
-            return Pair(!hasErrors, deletedCount)
-        }
-    }
-
-    private fun deleteEntireFolderFromServer(context: Context): Pair<Boolean, Int> {
-        // Count how many files we have to get the deletedCount value
-        val filesCount = points.values.count { it.fileName != null }
-
-        // Use CompletableDeferred to make this function synchronous
-        val deferred = CompletableDeferred<Boolean>()
-
-        // Call the endpoint to delete the entire folder
-        val params = mapOf("record_id" to id)
-
-        ServerApi.get("/delete_record_folder", params) { result ->
-            when (result) {
-                is ServerApi.ApiResult.Success -> {
-                    Log.d("Recording", "Successfully deleted record folder: $id")
-                    deferred.complete(true)
-                }
-                is ServerApi.ApiResult.Error -> {
-                    Log.e("Recording", "Failed to delete record folder: ${result.message}")
-                    deferred.complete(false)
-                }
-                else -> {}
-            }
-        }
-
-        // Wait for result with timeout
-        return try {
-            val success = runBlocking(Dispatchers.IO) {
-                withTimeout(10000) { deferred.await() }
-            }
-            Pair(success, if (success) filesCount else 0)
-        } catch (e: Exception) {
-            Log.e("Recording", "Error deleting record folder", e)
-            Pair(false, 0)
-        }
-    }
 }

@@ -95,52 +95,6 @@ object RecordManager {
         }
     }
 
-//    fun syncWithServer(recordId: String, callback: (Boolean) -> Unit) {
-//        if (!AppConfig.online) {
-//            callback(true)
-//            return
-//        }
-//
-//        // Use the query parameter in the URL
-//        val url = "/get_wav_files?folderId=$recordId"
-//
-//        // Use ServerApi for the request
-//        ServerApi.get(url, context = applicationContext) { result ->
-//            when (result) {
-//                is ServerApi.ApiResult.Success -> {
-//                    try {
-//                        val jsonData = result.data
-//                        val json = JSONObject(jsonData)
-//                        val files = json.getString("files").split(" ")
-//                        val labels = json.optJSONObject("labels") ?: JSONObject()
-//
-//                        // Get or create the recording
-//                        val recording = recordings[recordId] ?: run {
-//                            val newRecording = Recording(recordId)
-//                            recordings[recordId] = newRecording
-//                            newRecording
-//                        }
-//
-//                        // Process each file to update point records
-//                        files.forEach { filename ->
-//                            val labelStr = labels.optString(filename, "")
-//                            recording.updateFromServerData(filename, labelStr)
-//                        }
-//                        callback(true)
-//                    } catch (e: Exception) {
-//                        Log.e("RecordManager", "Error processing server response", e)
-//                        callback(false)
-//                    }
-//                }
-//                is ServerApi.ApiResult.Error -> {
-//                    Log.e("RecordManager", "Failed to sync with server: ${result.message}")
-//                    callback(false)
-//                }
-//                else -> callback(false)
-//            }
-//        }
-//    }
-
     fun getAllPointRecords(recordId: String): Map<Int, PointRecord>? {
         return recordings[recordId]?.points
     }
@@ -148,11 +102,6 @@ object RecordManager {
     fun getRecording(id: String): Recording? = recordings[id]
 
     fun getAllRecordingIds(): List<String> = recordings.keys.toList()
-
-    fun getFileName(recordingId: String, pointNumber: Int): String {
-        return recordings[recordingId]?.generateFileName(pointNumber)
-            ?: throw IllegalStateException("Recording $recordingId not found")
-    }
 
     fun setPointRecorded(recordingId: String, pointNumber: Int) {
         recordings[recordingId]?.setPointRecorded(pointNumber)
@@ -173,6 +122,103 @@ object RecordManager {
 
     fun getButtonColor(record: PointRecord): Int {
         return record.getButtonColor()
+    }
+
+
+
+    // DELETING
+    fun resetPoint(recordingId: String, pointNumber: Int, context: Context, onComplete: (Boolean) -> Unit) {
+        Log.d("RecordManager", "resetPoint called for recording: $recordingId, point: $pointNumber")
+
+        // First, check if we need to show a confirmation dialog
+        val dialogView = LayoutInflater.from(context).inflate(R.layout.confirm_delete_dialog, null)
+
+        // Update message with point number
+        dialogView.findViewById<TextView>(R.id.dialogMessage).text =
+            "Are you sure you want to delete the recording for point $pointNumber?"
+
+        // Create dialog
+        val alertDialog = AlertDialog.Builder(context)
+            .setView(dialogView)
+            .setCancelable(false)
+            .create()
+
+        // Set up cancel button
+        dialogView.findViewById<Button>(R.id.cancelButton).setOnClickListener {
+            Log.d("RecordManager", "Reset cancelled by user")
+            alertDialog.dismiss()
+            onComplete(false)  // Operation cancelled
+        }
+
+        // Set up delete button
+        dialogView.findViewById<Button>(R.id.deleteButton).setOnClickListener {
+            Log.d("RecordManager", "Reset confirmed by user, proceeding with deletion")
+            alertDialog.dismiss()
+
+            // Show progress dialog if in online mode
+            val progressDialog = if (AppConfig.online) {
+                ProgressDialog(context).apply {
+                    setMessage("Deleting recording from server...")
+                    setCancelable(false)
+                    show()
+                }
+            } else null
+
+            // Use a background thread to perform the deletion
+            Thread {
+                try {
+                    // Get the recording
+                    val recording = recordings[recordingId]
+
+                    if (recording == null) {
+                        Log.e("RecordManager", "Recording not found: $recordingId")
+                        Handler(Looper.getMainLooper()).post {
+                            progressDialog?.dismiss()
+                            onComplete(false)
+                        }
+                        return@Thread
+                    }
+
+                    // Get the point record
+                    val pointRecord = recording.getPointRecord(pointNumber)
+
+                    if (pointRecord == null) {
+                        Log.e("RecordManager", "Point not found: $pointNumber")
+                        Handler(Looper.getMainLooper()).post {
+                            progressDialog?.dismiss()
+                            onComplete(false)
+                        }
+                        return@Thread
+                    }
+
+                    // Perform the deletion using Recording.resetPoint
+                    Log.d("RecordManager", "Calling Recording.resetPoint")
+                    val success = recording.resetPoint(pointNumber, context)
+                    Log.d("RecordManager", "Recording.resetPoint result: $success")
+
+                    // Update UI on main thread
+                    Handler(Looper.getMainLooper()).post {
+                        progressDialog?.dismiss()
+
+                        if (success) {
+                            Log.d("RecordManager", "Point reset successful")
+                        } else {
+                            Log.e("RecordManager", "Point reset failed")
+                        }
+
+                        onComplete(success)
+                    }
+                } catch (e: Exception) {
+                    Log.e("RecordManager", "Error resetting point", e)
+                    Handler(Looper.getMainLooper()).post {
+                        progressDialog?.dismiss()
+                        onComplete(false)
+                    }
+                }
+            }.start()
+        }
+
+        alertDialog.show()
     }
 
     fun deleteRecordingFromServer(recordingId: String, context: Context): Boolean {
@@ -334,8 +380,13 @@ object RecordManager {
         Log.d("RecordManager", "Removed recording $recordingId from list")
     }
 
-    fun setRemoteFileName(recordingId: String, pointNumber: Int, filename: String) {
-        recordings[recordingId]?.setRemoteFileName(pointNumber, filename)
+    fun generateFilename(recordingId: String, pointNumber: String) : String {
+        return "${recordingId}point${pointNumber}.wav"
+    }
+    fun setFileName(recordingId: String, pointNumber: Int, fileName: String) : String? {
+        val rec = recordings[recordingId]?: throw IllegalStateException("Recording $recordingId not found")
+        rec.setFileName(pointNumber, fileName)
+        return rec.getFileName(pointNumber)
     }
 
     fun checkServerResponse(callback: (Boolean) -> Unit) {
@@ -354,6 +405,8 @@ object RecordManager {
         }
     }
 
+
+/*
     fun stopPlayback() {
         // Delegate to AudioPlaybackManager
         AudioPlaybackManager.getInstance().stopPlayback()
@@ -364,99 +417,8 @@ object RecordManager {
         AudioPlaybackManager.getInstance().releaseResources()
     }
 
-    fun resetPoint(recordingId: String, pointNumber: Int, context: Context, onComplete: (Boolean) -> Unit) {
-        Log.d("RecordManager", "resetPoint called for recording: $recordingId, point: $pointNumber")
+ */
 
-        // First, check if we need to show a confirmation dialog
-        val dialogView = LayoutInflater.from(context).inflate(R.layout.confirm_delete_dialog, null)
-
-        // Update message with point number
-        dialogView.findViewById<TextView>(R.id.dialogMessage).text =
-            "Are you sure you want to delete the recording for point $pointNumber?"
-
-        // Create dialog
-        val alertDialog = AlertDialog.Builder(context)
-            .setView(dialogView)
-            .setCancelable(false)
-            .create()
-
-        // Set up cancel button
-        dialogView.findViewById<Button>(R.id.cancelButton).setOnClickListener {
-            Log.d("RecordManager", "Reset cancelled by user")
-            alertDialog.dismiss()
-            onComplete(false)  // Operation cancelled
-        }
-
-        // Set up delete button
-        dialogView.findViewById<Button>(R.id.deleteButton).setOnClickListener {
-            Log.d("RecordManager", "Reset confirmed by user, proceeding with deletion")
-            alertDialog.dismiss()
-
-            // Show progress dialog if in online mode
-            val progressDialog = if (AppConfig.online) {
-                ProgressDialog(context).apply {
-                    setMessage("Deleting recording from server...")
-                    setCancelable(false)
-                    show()
-                }
-            } else null
-
-            // Use a background thread to perform the deletion
-            Thread {
-                try {
-                    // Get the recording
-                    val recording = recordings[recordingId]
-
-                    if (recording == null) {
-                        Log.e("RecordManager", "Recording not found: $recordingId")
-                        Handler(Looper.getMainLooper()).post {
-                            progressDialog?.dismiss()
-                            onComplete(false)
-                        }
-                        return@Thread
-                    }
-
-                    // Get the point record
-                    val pointRecord = recording.getPointRecord(pointNumber)
-
-                    if (pointRecord == null) {
-                        Log.e("RecordManager", "Point not found: $pointNumber")
-                        Handler(Looper.getMainLooper()).post {
-                            progressDialog?.dismiss()
-                            onComplete(false)
-                        }
-                        return@Thread
-                    }
-
-                    // Perform the deletion using Recording.resetPoint
-                    Log.d("RecordManager", "Calling Recording.resetPoint")
-                    val success = recording.resetPoint(pointNumber, context)
-                    Log.d("RecordManager", "Recording.resetPoint result: $success")
-
-                    // Update UI on main thread
-                    Handler(Looper.getMainLooper()).post {
-                        progressDialog?.dismiss()
-
-                        if (success) {
-                            Log.d("RecordManager", "Point reset successful")
-                        } else {
-                            Log.e("RecordManager", "Point reset failed")
-                        }
-
-                        onComplete(success)
-                    }
-                } catch (e: Exception) {
-                    Log.e("RecordManager", "Error resetting point", e)
-                    Handler(Looper.getMainLooper()).post {
-                        progressDialog?.dismiss()
-                        onComplete(false)
-                    }
-                }
-            }.start()
-        }
-
-        alertDialog.show()
-    }
 
     fun transferAllOfflineRecordingsToServer(context: Context, onComplete: ((Boolean) -> Unit)? = null) {
         Log.d("RecordManager", "Starting transfer of all offline recordings to server")
@@ -470,12 +432,18 @@ object RecordManager {
 
         // Get all recording IDs
         val allRecordingIds = recordings.keys.toList()
+        Log.d("RecordManager", "Found ${allRecordingIds.size} recordings to evaluate for transfer")
 
         if (allRecordingIds.isEmpty()) {
             Log.d("RecordManager", "No recordings found to transfer")
             Toast.makeText(context, "No recordings to transfer", Toast.LENGTH_SHORT).show()
             onComplete?.invoke(true) // Success but nothing to do
             return
+        } else {
+            // BUG FOUND: This else block has an incorrect toast message that gets displayed even when recordings exist
+            // Changed from "No recordings to transfer" to show actual count
+            Log.d("RecordManager", "Found ${allRecordingIds.size} recordings for transfer")
+            Toast.makeText(context, "Found ${allRecordingIds.size} recordings to transfer", Toast.LENGTH_SHORT).show()
         }
 
         // Create progress dialog
@@ -488,28 +456,33 @@ object RecordManager {
             progress = 0
             show()
         }
+        Log.d("RecordManager", "Progress dialog created and shown")
 
         // Counter for completed transfers
         val totalRecordings = allRecordingIds.size
         var completedCount = 0
         var successCount = 0
 
+        // Log which recording is currently active and will be skipped
+        Log.d("RecordManager", "Current active recording ID: $currentRecording (will be skipped)")
+
         // Execute transfer in background thread
         Thread {
+            Log.d("RecordManager", "Starting background transfer thread")
             try {
                 for (recordingId in allRecordingIds) {
-                    // Skip the active recording
-                    if (recordingId == currentRecording) {
-                        Log.d("RecordManager", "Skipping active recording: $recordingId")
-                        completedCount++
-                        continue
-                    }
+                    Log.d("RecordManager", "Processing recording ID: $recordingId")
 
                     // Update progress dialog on main thread
                     Handler(Looper.getMainLooper()).post {
-                        progressDialog.setMessage("Transferring recording $completedCount of $totalRecordings...")
+                        val progressMessage = "Transferring recording $completedCount of $totalRecordings..."
+                        Log.d("RecordManager", progressMessage)
+                        progressDialog.setMessage(progressMessage)
                         progressDialog.progress = (completedCount * 100) / totalRecordings
                     }
+
+                    // Log before transfer attempt
+                    Log.d("RecordManager", "Attempting to transfer recording: $recordingId")
 
                     // Transfer individual recording
                     transferOfflineRecordingToServer(
@@ -518,6 +491,7 @@ object RecordManager {
                         onProgress = { progress ->
                             // We're using the progress of individual transfer as a sub-progress
                             // But we don't update the main progress dialog to avoid UI flickering
+                            Log.v("RecordManager", "Recording $recordingId transfer progress: $progress%")
                         },
                         onComplete = { success ->
                             if (success) {
@@ -529,47 +503,71 @@ object RecordManager {
 
                             // Count as completed regardless of success
                             completedCount++
+                            Log.d("RecordManager", "Completed: $completedCount/$totalRecordings (Success: $successCount)")
                         }
                     )
 
                     // Small delay to prevent overwhelming the server
+                    Log.d("RecordManager", "Sleeping 500ms before next transfer")
                     Thread.sleep(500)
                 }
 
                 // Wait for all transfers to complete
+                Log.d("RecordManager", "All transfer requests sent, waiting for completions...")
                 while (completedCount < totalRecordings) {
+                    Log.d("RecordManager", "Waiting for completions: $completedCount/$totalRecordings done")
                     Thread.sleep(100)
                 }
 
                 // Update UI on main thread with final result
+                Log.d("RecordManager", "All transfers completed. Updating UI on main thread")
                 Handler(Looper.getMainLooper()).post {
-                    progressDialog.dismiss()
+                    try {
+                        progressDialog.dismiss()
+                        Log.d("RecordManager", "Progress dialog dismissed")
 
-                    // Show completion message
-                    val message = if (successCount > 0) {
-                        "Successfully transferred $successCount out of ${totalRecordings - 1} recordings"
-                    } else {
-                        "Failed to transfer any recordings"
+                        // Show completion message
+                        val message = if (successCount > 0) {
+                            "Successfully transferred $successCount out of ${totalRecordings - 1} recordings"
+                        } else {
+                            "Failed to transfer any recordings"
+                        }
+
+                        Log.d("RecordManager", message)
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        Log.d("RecordManager", "Transfer completed: $successCount/${totalRecordings - 1} recordings transferred")
+
+                        // Call the completion callback with success if at least one recording was transferred
+                        Log.d("RecordManager", "Calling onComplete with result: ${successCount > 0}")
+                        onComplete?.invoke(successCount > 0)
+                    } catch (e: Exception) {
+                        Log.e("RecordManager", "Error in UI update after transfer", e)
+                        Toast.makeText(context, "Error updating UI after transfer: ${e.message}", Toast.LENGTH_LONG).show()
+                        onComplete?.invoke(false)
                     }
-
-                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                    Log.d("RecordManager", "Transfer completed: $successCount/${totalRecordings - 1} recordings transferred")
-
-                    // Call the completion callback with success if at least one recording was transferred
-                    onComplete?.invoke(successCount > 0)
                 }
 
             } catch (e: Exception) {
                 Log.e("RecordManager", "Error transferring all recordings", e)
+                Log.e("RecordManager", "Stack trace: ${e.stackTraceToString()}")
 
                 // Update UI on main thread
                 Handler(Looper.getMainLooper()).post {
-                    progressDialog.dismiss()
-                    Toast.makeText(context, "Error transferring recordings: ${e.message}", Toast.LENGTH_LONG).show()
-                    onComplete?.invoke(false)
+                    try {
+                        progressDialog.dismiss()
+                        Log.d("RecordManager", "Progress dialog dismissed after error")
+                        Toast.makeText(context, "Error transferring recordings: ${e.message}", Toast.LENGTH_LONG).show()
+                        onComplete?.invoke(false)
+                    } catch (innerException: Exception) {
+                        Log.e("RecordManager", "Error dismissing dialog after exception", innerException)
+                        Toast.makeText(context, "Multiple errors occurred during transfer", Toast.LENGTH_LONG).show()
+                        onComplete?.invoke(false)
+                    }
                 }
             }
         }.start()
+
+        Log.d("RecordManager", "Background transfer thread started")
     }
     fun transferOfflineRecordingToServer(
         recordingId: String,
@@ -634,10 +632,10 @@ object RecordManager {
 
                     // Use the point number as the server filename
                     val pointNumber = point.pointNumber
-                    val serverFileName = "$recordingId$pointNumber.wav"
+//                    val serverFileName = "${recordingId}point${pointNumber}.wav"
 
                     // Upload the file using ServerApi
-                    val fileUploaded = uploadFileToServer(localFile, recordingId, serverFileName, pointNumber, context)
+                    val fileUploaded = uploadFileToServer(localFile, recordingId, fileName, pointNumber, context)
 
                     if (fileUploaded) {
                         successCount++
@@ -686,7 +684,7 @@ object RecordManager {
 
     private fun uploadFileToServer(file: File, recordingId: String, serverFileName: String, pointNumber: Int, context: Context): Boolean {
         try {
-            Log.d("RecordManager", "Uploading file: ${file.name} to server as $serverFileName")
+            Log.d("RecordManager_upload", "Uploading file: ${file.name} to server as $serverFileName")
 
             // Get the point record to update
             val recording = recordings[recordingId]
@@ -715,7 +713,8 @@ object RecordManager {
             val params = mapOf(
                 "button_number" to pointNumber.toString(),
                 "record_id" to recordingId,
-                "pointRecordId" to recordingId // Using recordingId as pointRecordId for simplicity
+                "pointRecordId" to recordingId, // Using recordingId as pointRecordId for simplicity
+                "fileName" to serverFileName
             )
 
             // Map of files to upload

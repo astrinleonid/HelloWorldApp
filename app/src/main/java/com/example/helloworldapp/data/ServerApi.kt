@@ -110,53 +110,7 @@ object ServerApi {
         }
     }
 
-    /**
-     * Send a POST request to the server (asynchronous)
-     */
-    fun post(
-        route: String,
-        params: Map<String, String> = emptyMap(),
-        files: Map<String, FileInfo> = emptyMap(),
-        context: Context? = null,
-        callback: (ApiResult<String>) -> Unit
-    ) {
-        if (!isOnline(context)) {
-            callback(ApiResult.Error("Device is offline", -1))
-            return
-        }
 
-        val url = "${AppConfig.serverIP}$route"
-        Log.d("ServerApi", "POST request to $url")
-
-        // Build multipart request
-        val requestBodyBuilder = MultipartBody.Builder().setType(MultipartBody.FORM)
-
-        // Add form parameters
-        params.forEach { (key, value) ->
-            requestBodyBuilder.addFormDataPart(key, value)
-        }
-
-        // Add files
-        files.forEach { (fieldName, fileInfo) ->
-            val file = File(fileInfo.path)
-            if (file.exists()) {
-                val mediaType = fileInfo.mimeType.toMediaTypeOrNull()
-                val requestBody = file.asRequestBody(mediaType)
-                requestBodyBuilder.addFormDataPart(fieldName, fileInfo.name, requestBody)
-            } else {
-                Log.e("ServerApi", "File not found: ${fileInfo.path}")
-            }
-        }
-
-        // Create request
-        val request = Request.Builder()
-            .url(url)
-            .post(requestBodyBuilder.build())
-            .build()
-
-        // Execute request in background
-        executeRequest(request, callback)
-    }
 
     /**
      * Send a POST request to the server (synchronous)
