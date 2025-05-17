@@ -56,6 +56,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         val viewServerRecordingsButton: Button = findViewById(R.id.view_server_recordings_button)
+        if (!AppConfig.admin) {
+            viewServerRecordingsButton.isEnabled = false
+            viewServerRecordingsButton.alpha = 0.01f // Optional: make it visually appear disabled
+        }
         viewServerRecordingsButton.setOnClickListener {
             openServerRecordingsInBrowser()
         }

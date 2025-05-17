@@ -17,6 +17,7 @@ enum class RecordLabel {
 data class PointRecord(
     val pointNumber: Int,
     var isRecorded: Boolean = false,
+    var offlineFile: Boolean = false,
     var label: RecordLabel = RecordLabel.NOLABEL,
     var fileName: String? = null
 ) {
@@ -82,10 +83,13 @@ data class PointRecord(
         isRecorded = true
     }
 
-    fun updateLabel(newLabel: RecordLabel) {
-        label = newLabel
+    fun markAsLocal() {
+        offlineFile = true
     }
 
+    fun isLocalFile() : Boolean {
+        return offlineFile
+    }
     fun reset() {
         isRecorded = false
         label = RecordLabel.NOLABEL
@@ -206,6 +210,9 @@ data class PointRecord(
             // For online mode, call AudioPlaybackManager with necessary info
             playbackManager.prepareOnlinePlayback(context, recordingId, fileName!!, pointNumber)
         } else {
+            if (!isLocalFile()) {
+                Toast.makeText(context, "Audio file stored on server, cannot play offline", Toast.LENGTH_SHORT).show()
+            }
             Log.d("PointRecord", "Playing OFFLINE file, filename: $fileName")
             // For offline mode, get the file path and pass to AudioPlaybackManager
             val file = File(context.filesDir, fileName!!)
@@ -232,18 +239,6 @@ data class Recording(
         return points[pointNumber]?.isRecorded ?: false
     }
 
-
-//    fun generateFileName(pointNumber: Int): String {
-//        if (!AppConfig.online) {
-//            val fileName = "offline_audio_rec_${id}_point_${pointNumber}_${System.currentTimeMillis()}.wav"
-//            points[pointNumber]?.fileName = fileName
-//            return fileName
-//        } else {
-//            Log.e("PointRecord", "Trying to generate a filename in online mode, get filename from the server instead")
-//            return ""
-//        }
-//    }
-
     fun setFileName(pointNumber: Int, filename: String) {
         points[pointNumber]?.let { point ->
             point.fileName = filename
@@ -261,7 +256,9 @@ data class Recording(
         points[pointNumber]?.markAsRecorded()
     }
 
-
+    fun setPointSavedLocally(pointNumber: Int) {
+        points[pointNumber]?.markAsLocal()
+    }
 
     fun resetPoint(pointNumber: Int, context: Context): Boolean {
         Log.d("Recording", "resetPoint called for recording: $id, point: $pointNumber")

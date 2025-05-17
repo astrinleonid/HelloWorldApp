@@ -8,35 +8,37 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Save Recording"
+        android:text="Сохранить запись"
         android:textSize="20sp"
         android:textStyle="bold"
         android:layout_marginBottom="16dp" />
 
-    <Button
-        android:id="@+id/btnSaveOnServer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
-        android:text="Save on Server" />
 
     <Button
         android:id="@+id/btnSaveLocally"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
-        android:text="Save Locally" />
+        android:text="Сохранить оффлайн" />
+
+    <Button
+        android:id="@+id/btnSaveOnServer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="Сохранить на сервере" />
+
 
     <Button
         android:id="@+id/btnDeleteRecording"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
-        android:text="Delete Recording" />
+        android:text="Удалить запись" />
 
     <Button
         android:id="@+id/btnCancel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Cancel" />
+        android:text="Вернуться" />
 </LinearLayout>

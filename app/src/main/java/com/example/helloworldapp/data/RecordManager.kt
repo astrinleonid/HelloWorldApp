@@ -95,16 +95,16 @@ object RecordManager {
         }
     }
 
-    fun getAllPointRecords(recordId: String): Map<Int, PointRecord>? {
-        return recordings[recordId]?.points
-    }
-
     fun getRecording(id: String): Recording? = recordings[id]
 
     fun getAllRecordingIds(): List<String> = recordings.keys.toList()
 
     fun setPointRecorded(recordingId: String, pointNumber: Int) {
         recordings[recordingId]?.setPointRecorded(pointNumber)
+    }
+
+    fun setPointSavedLocally(recordingId: String, pointNumber: Int) {
+        recordings[recordingId]?.setPointSavedLocally(pointNumber)
     }
 
     fun cyclePointLabel(recordingId: String, pointNumber: Int): RecordLabel? {
@@ -123,8 +123,6 @@ object RecordManager {
     fun getButtonColor(record: PointRecord): Int {
         return record.getButtonColor()
     }
-
-
 
     // DELETING
     fun resetPoint(recordingId: String, pointNumber: Int, context: Context, onComplete: (Boolean) -> Unit) {
@@ -406,20 +404,6 @@ object RecordManager {
     }
 
 
-/*
-    fun stopPlayback() {
-        // Delegate to AudioPlaybackManager
-        AudioPlaybackManager.getInstance().stopPlayback()
-    }
-
-    fun releaseMediaPlayer() {
-        // Delegate to AudioPlaybackManager
-        AudioPlaybackManager.getInstance().releaseResources()
-    }
-
- */
-
-
     fun transferAllOfflineRecordingsToServer(context: Context, onComplete: ((Boolean) -> Unit)? = null) {
         Log.d("RecordManager", "Starting transfer of all offline recordings to server")
 
@@ -632,7 +616,6 @@ object RecordManager {
 
                     // Use the point number as the server filename
                     val pointNumber = point.pointNumber
-//                    val serverFileName = "${recordingId}point${pointNumber}.wav"
 
                     // Upload the file using ServerApi
                     val fileUploaded = uploadFileToServer(localFile, recordingId, fileName, pointNumber, context)

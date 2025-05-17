@@ -22,16 +22,37 @@ object DialogUtils {
         activity.startActivity(intent)
         activity.finish()
     }
+
     fun showSaveOptionsDialog(activity: AppCompatActivity, recordId: String?) {
         val dialogView = activity.layoutInflater.inflate(R.layout.dialog_confirmation, null)
         val dialog = AlertDialog.Builder(activity)
             .setView(dialogView)
             .create()
 
-        // 1. Save on server
+        // Get reference to the Save Locally button
+        val btnSaveLocally = dialogView.findViewById<Button>(R.id.btnSaveLocally)
+
+        // Check if app is in online mode and disable Save Locally button accordingly
+        if (AppConfig.online) {
+            btnSaveLocally.isEnabled = false
+            btnSaveLocally.alpha = 0.5f
+        }
+
+        // 1. Save locally
+        btnSaveLocally.setOnClickListener {
+            dialog.dismiss()
+            RecordManager.resetActive()
+            // Set to offline mode explicitly
+            AppConfig.online = false
+            activity.startActivity(Intent(activity, MainActivity::class.java))
+            activity.finish()
+        }
+
+        // 2. Save on server
         dialogView.findViewById<Button>(R.id.btnSaveOnServer).setOnClickListener {
             dialog.dismiss()
             RecordManager.resetActive()
+
             // Show progress dialog for server checks
             val progressDialog = ProgressDialog(activity).apply {
                 setMessage("Checking server connection...")
@@ -46,73 +67,38 @@ object DialogUtils {
                         // Server is responsive, set online mode
                         AppConfig.online = true
 
-                        // Now check if we need to transfer an offline recording
-                        val recording = recordId?.let { id -> RecordManager.getRecording(id) }
-                        val hasOfflineFiles = recording?.points?.values?.any {
-                            it.isRecorded && it.fileName != null && it.fileName!!.startsWith("offline_")
-                        } ?: false
+                        // Update progress dialog
+                        progressDialog.setMessage("Transferring recordings to server...")
 
-                        if (hasOfflineFiles && recordId != null) {
-                            // We have an offline recording to transfer and recordId is not null
-                            progressDialog.setMessage("Transferring offline recording to server...")
+                        // Use RecordManager's transferAllOfflineRecordingsToServer
+                        RecordManager.transferAllOfflineRecordingsToServer(
+                            context = activity,
+                            onComplete = { transferSuccess ->
+                                activity.runOnUiThread {
+                                    progressDialog.dismiss()
 
-                            RecordManager.transferOfflineRecordingToServer(
-                                recordingId = recordId,
-                                context = activity,
-                                onProgress = { progress ->
-                                    activity.runOnUiThread {
-                                        progressDialog.setMessage("Transferring offline recording to server... $progress%")
+                                    if (transferSuccess) {
+                                        Toast.makeText(activity, "Recordings transferred to server successfully", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(activity, "Some recordings could not be transferred", Toast.LENGTH_SHORT).show()
                                     }
-                                },
-                                onComplete = { success ->
-                                    activity.runOnUiThread {
-                                        progressDialog.dismiss()
 
-                                        if (success) {
-                                            Toast.makeText(activity, "Recording transferred to server successfully", Toast.LENGTH_SHORT).show()
-                                            // Continue to QR code display
-                                            val intent = Intent(activity, ShowQrActivity::class.java).apply {
-                                                putExtra("UNIQUE_ID", recordId)
-                                            }
-                                            RecordManager.removeRecordingFromList(recordId)
-                                            activity.startActivity(intent)
-                                            activity.finish()
-                                        } else {
-                                            // Show error message
-                                            Toast.makeText(activity, "Failed to transfer recording to server", Toast.LENGTH_LONG).show()
-
-                                            // Ask if user wants to try again or go back
-                                            AlertDialog.Builder(activity)
-                                                .setTitle("Transfer Failed")
-                                                .setMessage("Would you like to try again or return to the previous screen?")
-                                                .setPositiveButton("Try Again") { _, _ ->
-                                                    // Re-click the button to restart the process
-                                                    dialogView.findViewById<Button>(R.id.btnSaveOnServer).performClick()
-                                                }
-                                                .setNegativeButton("Go Back") { _, _ ->
-                                                    // Do nothing, dialog already dismissed
-                                                }
-                                                .setCancelable(false)
-                                                .show()
+                                    // Whether transfer was successful or not, continue to QR code if we have a recordId
+                                    if (recordId != null) {
+                                        // Move to QR code display
+                                        val intent = Intent(activity, ShowQrActivity::class.java).apply {
+                                            putExtra("UNIQUE_ID", recordId)
                                         }
+                                        activity.startActivity(intent)
+                                        activity.finish()
+                                    } else {
+                                        // Return to main activity if we don't have a recordId
+                                        activity.startActivity(Intent(activity, MainActivity::class.java))
+                                        activity.finish()
                                     }
                                 }
-                            )
-                        } else {
-                            // No transfer needed or recordId is null
-                            progressDialog.dismiss()
-
-                            if (recordId != null) {
-                                val intent = Intent(activity, ShowQrActivity::class.java).apply {
-                                    putExtra("UNIQUE_ID", recordId)
-                                }
-                                RecordManager.removeRecordingFromList(recordId)
-                                activity.startActivity(intent)
-                                activity.finish()
-                            } else {
-                                Toast.makeText(activity, "Invalid recording ID", Toast.LENGTH_SHORT).show()
                             }
-                        }
+                        )
                     } else {
                         // Server is not responsive
                         progressDialog.dismiss()
@@ -137,16 +123,6 @@ object DialogUtils {
                     }
                 }
             }
-        }
-
-        // 2. Save locally
-        dialogView.findViewById<Button>(R.id.btnSaveLocally).setOnClickListener {
-            dialog.dismiss()
-            RecordManager.resetActive()
-            // Set to offline mode explicitly
-            AppConfig.online = false
-            activity.startActivity(Intent(activity, MainActivity::class.java))
-            activity.finish()
         }
 
         // 3. Delete recording

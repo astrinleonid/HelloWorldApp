@@ -345,15 +345,12 @@ class RecordActivity : ComponentActivity() {
                 is ServerApi.ApiResult.Success -> {
                     try {
                         val jsonObject = JSONObject(apiResult.data)
-//                        val filename = jsonObject.optString("filename", null)
 
                         if (!filename.isNullOrEmpty()) {
-//                            Log.d("RecordActivity", "Received filename from server: $filename")
 
                             // Store the filename in RecordManager
                             val pointNumber = buttonNumber.toIntOrNull() ?: 0
                             RecordManager.setFileName(recordingId, pointNumber, filename)
-//                            RecordManager.setPointRecorded(recordingId, pointNumber)
                         } else {
                             Log.e("RecordActivity", "No filename received from server")
                         }
@@ -382,6 +379,7 @@ class RecordActivity : ComponentActivity() {
             file.writeBytes(audioData)
             // Update RecordManager with recording information
             RecordManager.setPointRecorded(recordingId, pointNumber)
+            RecordManager.setPointSavedLocally(recordingId, pointNumber)
 
             Log.d("RecordActivity", "Saved local recording: $fileName")
         } catch (e: Exception) {

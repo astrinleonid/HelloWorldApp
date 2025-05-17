@@ -17,6 +17,7 @@ import com.example.helloworldapp.data.RecordManager
 
 object SettingsUtils {
     private const val TAG = "SettingsUtils"
+    private const val ADMIN_PASSWORD = "TeproAdmin"
     /**
      * Shows the settings dialog to the user
      */
@@ -28,6 +29,8 @@ object SettingsUtils {
         val numChunksEdit: EditText = dialogView.findViewById(R.id.edit_num_chunks)
         val chunkLengthEdit: EditText = dialogView.findViewById(R.id.edit_chunk_length)
         val onlineCheckbox: CheckBox = dialogView.findViewById(R.id.checkbox_online)
+        // Add reference to the admin password field
+        val adminPasswordEdit: EditText = dialogView.findViewById(R.id.admin_rights)
 
         // Set current values from AppConfig
         serverIpEdit.setText(AppConfig.serverIP)
@@ -35,6 +38,13 @@ object SettingsUtils {
         numChunksEdit.setText(AppConfig.numChunks.toString())
         chunkLengthEdit.setText(AppConfig.segmentLength.toString())
         onlineCheckbox.isChecked = AppConfig.online
+
+        // Set admin password field based on current admin status
+        if (AppConfig.admin) {
+            adminPasswordEdit.setText(ADMIN_PASSWORD)
+        } else {
+            adminPasswordEdit.setText("")
+        }
 
         AlertDialog.Builder(context)
             .setTitle("Settings")
@@ -44,6 +54,33 @@ object SettingsUtils {
                 AppConfig.timeOut = timeoutEdit.text.toString().toIntOrNull() ?: 10
                 AppConfig.numChunks = numChunksEdit.text.toString().toIntOrNull() ?: 5
                 AppConfig.segmentLength = chunkLengthEdit.text.toString().toIntOrNull() ?: 3
+
+                // Handle admin mode
+                val enteredPassword = adminPasswordEdit.text.toString()
+                val wasAdmin = AppConfig.admin
+                if (enteredPassword == ADMIN_PASSWORD) {
+                    AppConfig.admin = true
+                    if (!wasAdmin) {
+                        // Only show toast if switching to admin mode
+                        Toast.makeText(context, "Admin mode activated", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    if (enteredPassword.isEmpty()) {
+                        // Empty password field - turn off admin mode
+                        if (wasAdmin) {
+                            AppConfig.admin = false
+                            Toast.makeText(context, "Admin mode deactivated", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        // Incorrect password
+                        AppConfig.admin = false
+                        if (wasAdmin) {
+                            Toast.makeText(context, "Admin mode deactivated - incorrect password", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Incorrect admin password", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
 
                 // Handle online/offline mode change
                 if (!AppConfig.online && onlineCheckbox.isChecked) {
