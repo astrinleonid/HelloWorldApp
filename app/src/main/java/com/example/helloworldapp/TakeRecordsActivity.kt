@@ -17,10 +17,11 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageButton
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import com.example.helloworldapp.components.CustomToolbar
+import com.example.helloworldapp.data.Metadata
 import com.example.helloworldapp.data.RecordManager
 import com.example.helloworldapp.utils.DialogUtils
 import com.example.helloworldapp.utils.SettingsUtils
@@ -84,6 +85,7 @@ class TakeRecordsActivity : AppCompatActivity() {
         setupButtons()
         createButtonGrid()
         updateAllButtons()
+        updateMetadataButton() // Add this line to update metadata button initially
         if (AppConfig.online) {
             checkServerConnectionQuality()
         }
@@ -117,8 +119,6 @@ class TakeRecordsActivity : AppCompatActivity() {
         }
     }
 
-
-
     private fun setupButtons() {
         // Change from Button to ImageButton
         findViewById<ImageButton>(R.id.changeSideButton).setOnClickListener {
@@ -129,6 +129,11 @@ class TakeRecordsActivity : AppCompatActivity() {
             }
             startActivity(intent)
             finish()
+        }
+
+        // New metadata button
+        findViewById<TextView>(R.id.metadataButton).setOnClickListener {
+            showMetadataEditor()
         }
 
         findViewById<Button>(R.id.doneButton).setOnClickListener {
@@ -277,6 +282,71 @@ class TakeRecordsActivity : AppCompatActivity() {
             mainButton?.setTextColor(semiTransparentWhite)
         }
     }
+
+    private fun showMetadataEditor() {
+        val currentRecording = RecordManager.getCurrentRecording() ?: return
+        DialogUtils.showEditMetadataDialog(this, currentRecording) { updatedMetadata ->
+            // The metadata sync is now handled inside DialogUtils.showEditMetadataDialog
+            // via RecordManager.setMetadata, so we just need to update the button display
+            updateMetadataButton()
+        }
+    }
+
+    private fun updateMetadataButton() {
+        val metadataButton = findViewById<TextView>(R.id.metadataButton)
+        val currentRecording = RecordManager.getCurrentRecording()
+
+        if (currentRecording?.meta != null) {
+            val meta = currentRecording.meta!!
+            val buttonText = buildMetadataButtonText(meta)
+            metadataButton.text = buttonText
+        } else {
+            metadataButton.text = "No Data"
+        }
+    }
+
+    private fun buildMetadataButtonText(metadata: Metadata): String {
+        val lines = mutableListOf<String>()
+
+        // Add user if not empty
+        if (metadata.user.isNotEmpty()) {
+            lines.add("User: ${metadata.user}")
+        }
+
+        // Add age if not 0
+        if (metadata.age > 0) {
+            lines.add("Age: ${metadata.age}")
+        }
+
+        // Add height if not 0
+        if (metadata.height > 0) {
+            lines.add("H: ${metadata.height}cm")
+        }
+
+        // Add weight if not 0
+        if (metadata.weight > 0) {
+            lines.add("W: ${metadata.weight}kg")
+        }
+
+        // Add diagnosis if not empty (abbreviated)
+        if (metadata.diagnosis.isNotEmpty()) {
+            val diagnosis = if (metadata.diagnosis.length > 8) {
+                metadata.diagnosis.substring(0, 8) + "..."
+            } else {
+                metadata.diagnosis
+            }
+            lines.add("Dx: $diagnosis")
+        }
+
+        // If we only have "META", show "No Data"
+        if (lines.size == 1) {
+            lines.add("No Data")
+        }
+
+        return lines.joinToString("\n")
+    }
+
+
 
     override fun onBackPressed() {
         showConfirmationDialog()

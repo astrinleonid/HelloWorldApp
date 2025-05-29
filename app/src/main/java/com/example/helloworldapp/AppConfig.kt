@@ -2,7 +2,7 @@
 
 object AppConfig {
 //    var serverIP: String = "http://74.208.75.175:5057" // Default value
-    var serverIP: String = "http://10.0.2.2:5057" // Default value
+    var serverIP: String = "http://74.208.75.175:5057/" // Default value
 //    var port: String = "5000"
     var timeOut: Int = 20
     var setupTimeout = 1500

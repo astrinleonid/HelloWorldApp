@@ -36,6 +36,25 @@
         app:layout_constraintTop_toBottomOf="@id/top_app_bar"
         android:contentDescription="Change side button" />
 
+    <TextView
+        android:id="@+id/metadataButton"
+        android:layout_width="140dp"
+        android:layout_height="160dp"
+        android:layout_margin="10dp"
+        android:background="@android:color/white"
+        android:contentDescription="Edit metadata"
+        android:padding="8dp"
+        android:text="No Data"
+        android:textSize="12sp"
+        android:textColor="@android:color/black"
+        android:gravity="center"
+        android:textAllCaps="false"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/top_app_bar" />
+
     <GridLayout
         android:id="@+id/buttonGrid"
         android:layout_width="wrap_content"

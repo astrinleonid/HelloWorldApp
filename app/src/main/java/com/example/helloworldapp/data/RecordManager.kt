@@ -95,7 +95,7 @@ object RecordManager {
         }
     }
 
-    fun getRecording(id: String): Recording? = recordings[id]
+    fun getCurrentRecording(): Recording? = recordings[currentRecording]
 
     fun getAllRecordingIds(): List<String> = recordings.keys.toList()
 
@@ -553,6 +553,87 @@ object RecordManager {
 
         Log.d("RecordManager", "Background transfer thread started")
     }
+
+    fun syncMetadataToServer(recordingId: String, metadata: Metadata, context: Context, onComplete: ((Boolean) -> Unit)? = null) {
+        if (!AppConfig.online) {
+            Log.d("RecordManager", "Not syncing metadata: offline mode")
+            onComplete?.invoke(false)
+            return
+        }
+
+        // Execute in background thread
+        Thread {
+            try {
+                // Prepare metadata in the format expected by server
+                val metadataMap = mapOf(
+                    "user" to metadata.user,
+                    "age" to metadata.age,
+                    "sex" to metadata.sex,
+                    "height" to metadata.height,
+                    "weight" to metadata.weight,
+                    "diagnosis" to metadata.diagnosis,
+                    "comment" to metadata.comment
+                )
+
+                // Create URL with query parameter
+                val url = "/update_metadata?record_id=$recordingId"
+
+                // Use ServerApi for the request
+                val result = ServerApi.postJsonSync(url, metadataMap, context)
+
+                when (result) {
+                    is ServerApi.ApiResult.Success -> {
+                        Log.d("RecordManager", "Metadata synced successfully to server for recording: $recordingId")
+                        Handler(Looper.getMainLooper()).post {
+                            onComplete?.invoke(true)
+                        }
+                    }
+                    is ServerApi.ApiResult.Error -> {
+                        Log.e("RecordManager", "Failed to sync metadata to server: ${result.message}")
+                        Handler(Looper.getMainLooper()).post {
+                            onComplete?.invoke(false)
+                        }
+                    }
+                    else -> {
+                        Handler(Looper.getMainLooper()).post {
+                            onComplete?.invoke(false)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("RecordManager", "Error syncing metadata to server", e)
+                Handler(Looper.getMainLooper()).post {
+                    onComplete?.invoke(false)
+                }
+            }
+        }.start()
+    }
+
+    // Update the existing setMetadata function or add this new one
+    fun setMetadata(recordingId: String, metadata: Metadata, context: Context? = null) {
+        val recording = recordings[recordingId]
+        if (recording == null) {
+            Log.e("RecordManager", "Recording not found: $recordingId")
+            return
+        }
+
+        // Update local metadata
+        recording.meta = metadata
+        Log.d("RecordManager", "Metadata updated locally for recording: $recordingId")
+
+        // If online and context available, sync to server
+        if (AppConfig.online && context != null) {
+            syncMetadataToServer(recordingId, metadata, context) { success ->
+                if (success) {
+                    Log.d("RecordManager", "Metadata successfully synced to server")
+                } else {
+                    Log.w("RecordManager", "Failed to sync metadata to server, but saved locally")
+                }
+            }
+        }
+    }
+
+
     fun transferOfflineRecordingToServer(
         recordingId: String,
         context: Context,
@@ -595,7 +676,13 @@ object RecordManager {
                     Handler(Looper.getMainLooper()).post { onComplete(false) }
                     return@Thread
                 }
-
+                syncMetadataToServer(recording.id, recording.meta!!, context) { success ->
+                    if (!success) {
+                        Log.w("RecordManager", "Failed to sync metadata for recording: $recordingId")
+                    } else {
+                        Log.d("RecordManager", "Metadata synced successfully for recording: $recordingId")
+                    }
+                }
                 // Step 2: Upload each file individually
                 var successCount = 0
                 val totalFiles = pointsWithFiles.size

@@ -2,17 +2,23 @@ package com.example.helloworldapp.utils
 
 import AppConfig
 import android.app.ProgressDialog
+import android.content.Context
 import android.content.Intent
 import android.util.Log
+import android.view.LayoutInflater
+import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.EditText
+import android.widget.Spinner
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.helloworldapp.MainActivity
 import com.example.helloworldapp.R
 import com.example.helloworldapp.ShowQrActivity
+import com.example.helloworldapp.data.Metadata
 import com.example.helloworldapp.data.RecordManager
-
+import com.example.helloworldapp.data.Recording
 object DialogUtils {
 
     private fun navigateToQrActivity(activity: AppCompatActivity, recordId: String) {
@@ -177,4 +183,68 @@ object DialogUtils {
 
         dialog.show()
     }
+    fun showEditMetadataDialog(context: Context, recording: Recording, onMetadataUpdated: (Metadata) -> Unit) {
+        val dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_edit_metadata, null)
+
+        val editUser = dialogView.findViewById<EditText>(R.id.editUser)
+        val editAge = dialogView.findViewById<EditText>(R.id.editAge)
+        val spinnerSex = dialogView.findViewById<Spinner>(R.id.spinnerSex)
+        val editHeight = dialogView.findViewById<EditText>(R.id.editHeight)
+        val editWeight = dialogView.findViewById<EditText>(R.id.editWeight)
+        val editDiagnosis = dialogView.findViewById<EditText>(R.id.editDiagnosis)
+        val editComment = dialogView.findViewById<EditText>(R.id.editComment)
+
+        // Setup spinner with sex options
+        val sexOptions = arrayOf("", "Male", "Female", "Other")
+        val adapter = ArrayAdapter(context, android.R.layout.simple_spinner_item, sexOptions)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spinnerSex.adapter = adapter
+
+        // Populate fields with current metadata
+        recording.meta?.let { metadata ->
+            editUser.setText(metadata.user)
+            if (metadata.age > 0) editAge.setText(metadata.age.toString())
+            if (metadata.height > 0) editHeight.setText(metadata.height.toString())
+            if (metadata.weight > 0) editWeight.setText(metadata.weight.toString())
+            editDiagnosis.setText(metadata.diagnosis)
+            editComment.setText(metadata.comment)
+
+            // Set sex spinner selection
+            val sexIndex = sexOptions.indexOf(metadata.sex)
+            if (sexIndex >= 0) {
+                spinnerSex.setSelection(sexIndex)
+            }
+        }
+
+        AlertDialog.Builder(context)
+            .setTitle("Edit Metadata")
+            .setView(dialogView)
+            .setPositiveButton("Save") { _, _ ->
+                val updatedMetadata = Metadata(
+                    user = editUser.text.toString().trim(),
+                    age = editAge.text.toString().toIntOrNull() ?: 0,
+                    sex = spinnerSex.selectedItem.toString(),
+                    height = editHeight.text.toString().toDoubleOrNull() ?: 0.0,
+                    weight = editWeight.text.toString().toDoubleOrNull() ?: 0.0,
+                    diagnosis = editDiagnosis.text.toString().trim(),
+                    comment = editComment.text.toString().trim()
+                )
+
+                // Use RecordManager to set metadata (this will handle sync if online)
+                RecordManager.setMetadata(recording.id, updatedMetadata, context)
+
+                // Call the callback
+                onMetadataUpdated(updatedMetadata)
+
+                // Show appropriate message based on online status
+                if (AppConfig.online) {
+                    Toast.makeText(context, "Metadata updated and synced to server", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Metadata updated locally", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
 }
+

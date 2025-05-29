@@ -227,8 +227,18 @@ data class PointRecord(
     }
 }
 
+data class Metadata(
+    val user: String,
+    val age: Int,
+    val sex: String,
+    val height: Double,
+    val weight: Double,
+    val diagnosis: String,
+    val comment: String
+)
 data class Recording(
     val id: String,
+    var meta: Metadata? = null,
     val points: Map<Int, PointRecord> = (1..10).associateWith { PointRecord(it) }
 ) {
     fun getPointRecord(pointNumber: Int): PointRecord? {
